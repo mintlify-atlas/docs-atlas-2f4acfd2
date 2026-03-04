@@ -58,10 +58,14 @@
     "TODO-Create - Create todo items",
     "TODO-List - List all todos",
     "TODO-Complete - Mark todos as complete",
+    "TODO-Update - Update todo task",
     "TODO-Delete - Delete todos",
+    "TODO-ClearCompleted - Clear completed todos",
     "Subscriptions - List EDteam subscriptions",
     "Courses-List - List EDteam courses",
     "Shopping-Cart-Add-Course - Add course to cart",
+    "random-quotes - Game of Thrones quotes resource",
+    "person-properties - Person data resource template",
     "got_quotes_analysis - Analyze GoT quotes prompt",
     "code_review - Code review prompt"
   ]
