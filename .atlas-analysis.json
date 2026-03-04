@@ -1,0 +1,68 @@
+{
+  "projectType": "general",
+  "projectName": "MCP Course",
+  "projectDescription": "A comprehensive course on the Model Context Protocol (MCP) with practical examples in TypeScript, Python, and Go.",
+  "theme": "mint",
+  "primaryColor": "#2563eb",
+  "lightColor": "#3b82f6",
+  "darkColor": "#1e40af",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": ["introduction", "quickstart"]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": ["concepts/mcp-protocol", "concepts/servers", "concepts/clients", "concepts/tools", "concepts/resources", "concepts/prompts"]
+          },
+          {
+            "group": "Server Implementations",
+            "pages": ["servers/basic-typescript", "servers/calculator-python", "servers/todo-typescript", "servers/edteam-go"]
+          },
+          {
+            "group": "Client Implementations",
+            "pages": ["clients/basic-typescript", "clients/basic-python", "clients/ollama-typescript", "clients/ollama-python"]
+          },
+          {
+            "group": "Integrations",
+            "pages": ["integrations/ollama"]
+          }
+        ]
+      },
+      {
+        "tab": "Examples",
+        "groups": [
+          {
+            "group": "Use Cases",
+            "pages": ["examples/game-of-thrones-quotes", "examples/calculator-operations", "examples/todo-management", "examples/edteam-api"]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Multi-language MCP server implementations (TypeScript, Python, Go)",
+    "Basic and advanced MCP client examples",
+    "Integration with Ollama for LLM function calling",
+    "Tools, resources, and prompts demonstrations",
+    "Real-world API integration examples"
+  ],
+  "publicApiSurface": [
+    "get_random_quotes - Fetch Game of Thrones quotes",
+    "lcm - Calculate least common multiple",
+    "calculate - Basic calculator operations",
+    "TODO-Create - Create todo items",
+    "TODO-List - List all todos",
+    "TODO-Complete - Mark todos as complete",
+    "TODO-Delete - Delete todos",
+    "Subscriptions - List EDteam subscriptions",
+    "Courses-List - List EDteam courses",
+    "Shopping-Cart-Add-Course - Add course to cart",
+    "got_quotes_analysis - Analyze GoT quotes prompt",
+    "code_review - Code review prompt"
+  ]
+}
