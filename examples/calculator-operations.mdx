@@ -1,0 +1,387 @@
+---
+title: Calculator Operations Server
+description: Build a simple MCP server in Python using FastMCP for basic arithmetic operations
+---
+
+# Calculator Operations Server
+
+This example demonstrates how to build a simple MCP server in Python using the FastMCP framework. It's perfect for understanding the basics of MCP tool implementation.
+
+## Overview
+
+The Calculator server shows:
+- **FastMCP Framework**: Quick server setup with minimal boilerplate
+- **Tool Registration**: Simple decorator-based tool registration
+- **Input Validation**: Parameter validation and error handling
+- **Basic Operations**: Addition, subtraction, multiplication, and division
+
+## Complete Implementation
+
+```python server.py
+from mcp.server.fastmcp import FastMCP
+
+# Initialize the MCP server
+mcp = FastMCP("Calculator MCP Server")
+
+# Basic arithmetic operations
+def add(a: float, b: float) -> float:
+    return float(a + b)
+
+def subtract(a: float, b: float) -> float:
+    return float(a - b)
+
+def multiply(a: float, b: float) -> float:
+    return float(a * b)
+
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("No se puede dividir por cero")
+    return float(a / b)
+
+# Register the calculator tool
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    """
+    Perform basic arithmetic operations.
+    
+    Args:
+        a: First number
+        b: Second number
+        operation: Operation to perform (add, subtract, multiply, divide)
+    
+    Returns:
+        Result of the operation
+    
+    Raises:
+        ValueError: If operation is invalid or division by zero
+    """
+    if operation == "add":
+        return add(a, b)
+    elif operation == "subtract":
+        return subtract(a, b)
+    elif operation == "multiply":
+        return multiply(a, b)
+    elif operation == "divide":
+        return divide(a, b)
+    else:
+        raise ValueError("Operación no válida")
+
+# Run the server
+if __name__ == "__main__":
+    mcp.run(transport='stdio')
+```
+
+## Understanding the Code
+
+### FastMCP Initialization
+
+```python
+mcp = FastMCP("Calculator MCP Server")
+```
+
+FastMCP provides a simple way to create MCP servers with minimal configuration. The server name is used for identification.
+
+### Tool Decorator
+
+```python
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    ...
+```
+
+The `@mcp.tool()` decorator automatically:
+- Registers the function as an MCP tool
+- Extracts parameter types from type hints
+- Generates JSON schema for the tool
+- Handles serialization/deserialization
+
+### Error Handling
+
+```python
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("No se puede dividir por cero")
+    return float(a / b)
+```
+
+Errors are propagated to the client as tool execution errors, making debugging easier.
+
+## Installation & Setup
+
+### Dependencies
+
+Create a `pyproject.toml` or `requirements.txt`:
+
+```toml pyproject.toml
+[project]
+name = "calculator-mcp-server"
+version = "1.0.0"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0"
+]
+```
+
+Or using `requirements.txt`:
+
+```txt requirements.txt
+mcp>=1.0.0
+```
+
+### Installation
+
+```bash
+# Using pip
+pip install mcp
+
+# Or using uv
+uv pip install mcp
+```
+
+## Running the Server
+
+### Standalone Mode
+
+```bash
+python server.py
+```
+
+The server runs in stdio mode, waiting for MCP client connections.
+
+### With MCP Inspector
+
+Use the MCP Inspector to test your server:
+
+```bash
+npx @modelcontextprotocol/inspector python server.py
+```
+
+## Using the Calculator
+
+### From Python Client
+
+```python client.py
+import asyncio
+from mcp_client import MCPClient
+
+async def main():
+    async with MCPClient("python", ["server.py"]) as client:
+        # List available tools
+        tools = await client.list_tools()
+        print("Available tools:", tools)
+        
+        # Perform addition
+        result = await client.execute_tool("calculate", {
+            "a": 10,
+            "b": 5,
+            "operation": "add"
+        })
+        print(f"10 + 5 = {result}")
+        
+        # Perform division
+        result = await client.execute_tool("calculate", {
+            "a": 20,
+            "b": 4,
+            "operation": "divide"
+        })
+        print(f"20 / 4 = {result}")
+
+if __name__ == "__main__":
+    asyncio.run(main())
+```
+
+### Expected Output
+
+```
+Available tools: [...]
+10 + 5 = 15.0
+20 / 4 = 5.0
+```
+
+## Testing Operations
+
+### Addition
+
+```json
+{
+  "a": 15,
+  "b": 7,
+  "operation": "add"
+}
+// Result: 22.0
+```
+
+### Subtraction
+
+```json
+{
+  "a": 100,
+  "b": 35,
+  "operation": "subtract"
+}
+// Result: 65.0
+```
+
+### Multiplication
+
+```json
+{
+  "a": 8,
+  "b": 7,
+  "operation": "multiply"
+}
+// Result: 56.0
+```
+
+### Division
+
+```json
+{
+  "a": 100,
+  "b": 5,
+  "operation": "divide"
+}
+// Result: 20.0
+```
+
+### Error Case: Division by Zero
+
+```json
+{
+  "a": 10,
+  "b": 0,
+  "operation": "divide"
+}
+// Error: "No se puede dividir por cero"
+```
+
+## Configuration for Claude Desktop
+
+```json claude_desktop_config.json
+{
+  "mcpServers": {
+    "calculator": {
+      "command": "python",
+      "args": ["/path/to/server.py"]
+    }
+  }
+}
+```
+
+Restart Claude Desktop after adding the configuration.
+
+## Extending the Calculator
+
+### Adding More Operations
+
+```python
+@mcp.tool()
+def advanced_calculate(a: float, b: float, operation: str) -> float:
+    """Advanced calculator with more operations."""
+    operations = {
+        "add": lambda x, y: x + y,
+        "subtract": lambda x, y: x - y,
+        "multiply": lambda x, y: x * y,
+        "divide": lambda x, y: x / y if y != 0 else None,
+        "power": lambda x, y: x ** y,
+        "modulo": lambda x, y: x % y if y != 0 else None,
+    }
+    
+    if operation not in operations:
+        raise ValueError(f"Invalid operation: {operation}")
+    
+    result = operations[operation](a, b)
+    if result is None:
+        raise ValueError("Invalid operation parameters")
+    
+    return float(result)
+```
+
+### Scientific Calculator
+
+```python
+import math
+
+@mcp.tool()
+def scientific_calculate(value: float, operation: str) -> float:
+    """Scientific calculator for single-value operations."""
+    operations = {
+        "sqrt": math.sqrt,
+        "sin": math.sin,
+        "cos": math.cos,
+        "tan": math.tan,
+        "log": math.log,
+        "log10": math.log10,
+        "exp": math.exp,
+    }
+    
+    if operation not in operations:
+        raise ValueError(f"Invalid operation: {operation}")
+    
+    return float(operations[operation](value))
+```
+
+## Key Advantages of FastMCP
+
+1. **Minimal Boilerplate**: No need to manually define schemas
+2. **Type Hints**: Automatic parameter validation from Python types
+3. **Easy Debugging**: Clear error messages and stack traces
+4. **Rapid Development**: Get a server running in minutes
+
+## Common Patterns
+
+### Input Validation
+
+```python
+@mcp.tool()
+def safe_divide(a: float, b: float) -> float:
+    """Safely divide two numbers."""
+    if not isinstance(a, (int, float)):
+        raise TypeError("a must be a number")
+    if not isinstance(b, (int, float)):
+        raise TypeError("b must be a number")
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return float(a / b)
+```
+
+### Default Parameters
+
+```python
+from typing import Optional
+
+@mcp.tool()
+def calculate_with_default(
+    a: float,
+    b: float = 1.0,
+    operation: str = "add"
+) -> float:
+    """Calculate with default operation."""
+    # Implementation here
+    pass
+```
+
+## Troubleshooting
+
+### Server Not Starting
+
+- Ensure `mcp` package is installed: `pip install mcp`
+- Check Python version: `python --version` (should be 3.10+)
+- Verify the script has no syntax errors
+
+### Tool Not Found
+
+- Ensure the `@mcp.tool()` decorator is present
+- Check that the function is defined before `mcp.run()`
+- Verify the server is running in stdio mode
+
+### Type Errors
+
+- Use proper type hints: `float`, `int`, `str`, etc.
+- FastMCP uses type hints for validation
+
+## Next Steps
+
+- Learn about [State Management](/examples/todo-management) with the Todo server
+- Explore [API Integration](/examples/edteam-api) for production patterns
+- See how to use this with [Ollama](/integrations/ollama)

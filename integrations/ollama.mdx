@@ -1,0 +1,564 @@
+---
+title: Ollama Integration
+description: Learn how to integrate MCP servers with Ollama for local LLM function calling
+---
+
+# Ollama Integration with MCP
+
+This guide shows how to integrate MCP (Model Context Protocol) servers with Ollama to enable function calling capabilities with local language models.
+
+## Overview
+
+The Ollama integration allows you to:
+- Connect to MCP servers and expose their tools to Ollama models
+- Use local LLMs with function calling capabilities
+- Build interactive chat applications with tool support
+
+## Prerequisites
+
+- **Ollama** installed and running locally
+- **Node.js 16+** (for TypeScript implementation)
+- **Python 3.13+** (for Python implementation)
+- An MCP server running (e.g., the Game of Thrones quotes server)
+
+## TypeScript Implementation
+
+### Installation
+
+First, install the required dependencies:
+
+```json package.json
+{
+  "name": "ollama-ts-app",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.13",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+```bash
+npm install
+```
+
+### MCP Client Setup
+
+Create a reusable MCP client to connect to MCP servers:
+
+```typescript src/mcpClient.ts
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+export class MCPClient {
+  private serverParams: {
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+  };
+  private client: Client | null = null;
+  private transport: StdioClientTransport | null = null;
+
+  constructor(
+    command: string,
+    args: string[],
+    env?: Record<string, string>
+  ) {
+    this.serverParams = { command, args, env };
+  }
+
+  async connect(): Promise<boolean> {
+    try {
+      this.transport = new StdioClientTransport(this.serverParams);
+      
+      this.client = new Client(
+        {
+          name: "mcp-typescript-client",
+          version: "1.0.0"
+        },
+        {
+          capabilities: {
+            prompts: {},
+            resources: {},
+            tools: {}
+          }
+        }
+      );
+
+      await this.client.connect(this.transport);
+      console.log("Conexión exitosa con servidor MCP");
+      return true;
+    } catch (e) {
+      console.error(`Error al conectar con servidor MCP: ${e}`);
+      await this.disconnect();
+      return false;
+    }
+  }
+
+  async listTools(): Promise<any> {
+    if (!this.client) {
+      throw new Error("Cliente no conectado. Llama a connect() primero");
+    }
+    return await this.client.listTools();
+  }
+
+  async executeTool(toolName: string, args: Record<string, any>): Promise<any> {
+    if (!this.client) {
+      throw new Error("Cliente no conectado. Llama a connect() primero");
+    }
+    
+    const result = await this.client.callTool({
+      name: toolName,
+      arguments: args
+    });
+    
+    return result;
+  }
+
+  async disconnect(): Promise<void> {
+    if (this.client) {
+      await this.client.close();
+      this.client = null;
+    }
+    this.transport = null;
+  }
+}
+```
+
+### Ollama API Client
+
+Create a client to communicate with Ollama's API:
+
+```typescript src/ollamaClient.ts
+import fetch from 'node-fetch';
+
+interface MessageType {
+  role: string;
+  content: string | null;
+  tool_calls?: any[];
+}
+
+export class OllamaAPIClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = "http://localhost:11434") {
+    this.baseUrl = baseUrl;
+  }
+
+  async checkConnection(): Promise<boolean> {
+    const response = await fetch(`${this.baseUrl}/api/tags`);
+    if (response.status !== 200) {
+      throw new Error(`Error al conectarse: ${response.status}`);
+    }
+    return true;
+  }
+
+  async chat(
+    model: string,
+    messages: MessageType[],
+    tools?: any[],
+    options?: any
+  ): Promise<string | { type: string; function_call: any }> {
+    const data: any = {
+      model: model,
+      messages: messages,
+      stream: false
+    };
+
+    if (tools) {
+      data.tools = tools;
+    }
+
+    const response = await fetch(
+      `${this.baseUrl}/api/chat`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      }
+    );
+
+    const responseText = await response.text();
+    return this._processResponse(responseText);
+  }
+
+  private _processResponse(responseText: string) {
+    const lines = responseText.trim().split('\n');
+    let fullResponse = "";
+
+    for (const line of lines) {
+      const respJson = JSON.parse(line);
+
+      // Check for function call
+      if (respJson.message?.tool_calls) {
+        const functionCall = respJson.message.tool_calls[0];
+        if (functionCall) {
+          return {
+            type: "function_call",
+            function_call: functionCall
+          };
+        }
+      }
+
+      // Accumulate normal response
+      if (respJson.message?.content) {
+        fullResponse += respJson.message.content;
+      }
+    }
+
+    return fullResponse;
+  }
+}
+```
+
+### Integrating MCP Tools with Ollama
+
+The key is converting MCP tools to Ollama's function calling format:
+
+```typescript src/ollamaAgent.ts
+class ToolManager {
+  getAllTools(mcpTools: any = null): any[] {
+    const tools = [];
+
+    // Convert MCP tools to Ollama format
+    if (mcpTools?.tools) {
+      for (const mcpTool of mcpTools.tools) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: `mcp_${mcpTool.name}`,
+            description: mcpTool.description || `MCP tool: ${mcpTool.name}`,
+            parameters: mcpTool.inputSchema || { type: 'object' }
+          }
+        });
+      }
+    }
+
+    return tools;
+  }
+}
+
+class OllamaAgent {
+  private ollamaClient: OllamaAPIClient;
+  private mcpClient: MCPClient;
+  private toolManager: ToolManager;
+  private toolsMCP: any = null;
+
+  constructor(
+    ollamaUrl: string = "http://localhost:11434",
+    mcpCommand: string = "node",
+    mcpArgs: string[] = ["path/to/server.js"]
+  ) {
+    this.ollamaClient = new OllamaAPIClient(ollamaUrl);
+    this.mcpClient = new MCPClient(mcpCommand, mcpArgs);
+    this.toolManager = new ToolManager();
+  }
+
+  async setup(): Promise<void> {
+    // Verify Ollama connection
+    await this.ollamaClient.checkConnection();
+    
+    // Connect to MCP server
+    const connected = await this.mcpClient.connect();
+    if (connected) {
+      this.toolsMCP = await this.mcpClient.listTools();
+    }
+  }
+
+  async executeMcpTool(toolName: string, args: Record<string, any>) {
+    return await this.mcpClient.executeTool(toolName, args);
+  }
+
+  async chat(model: string, messages: any[], options?: any) {
+    const tools = this.toolManager.getAllTools(this.toolsMCP);
+    return this.ollamaClient.chat(model, messages, tools, options);
+  }
+}
+```
+
+### Function Execution
+
+Handle function calls from Ollama:
+
+```typescript
+async function executeFunction(
+  functionName: string,
+  functionArgs: Record<string, any>,
+  agent: OllamaAgent
+): Promise<string> {
+  // Check if it's an MCP tool (prefixed with "mcp_")
+  if (functionName.startsWith("mcp_")) {
+    const actualToolName = functionName.substring(4);
+    const result = await agent.executeMcpTool(actualToolName, functionArgs);
+    return JSON.stringify(result);
+  }
+
+  return `Function ${functionName} not implemented`;
+}
+```
+
+## Python Implementation
+
+### Installation
+
+Create a `pyproject.toml` file:
+
+```toml pyproject.toml
+[project]
+name = "ollama-mcp-client"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=1.6.0",
+    "requests>=2.32.3",
+]
+```
+
+Install dependencies:
+
+```bash
+uv pip install -e .
+```
+
+### MCP Client
+
+```python mcp_client.py
+import logging
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
+
+class MCPClient:
+    def __init__(self, command: str, args: list[str], env: Optional[Dict[str, str]] = None):
+        self.server_params = StdioServerParameters(
+            command=command,
+            args=args,
+            env=env
+        )
+        self.session = None
+
+    async def connect(self) -> bool:
+        try:
+            self._client_ctx = stdio_client(self.server_params)
+            client = await self._client_ctx.__aenter__()
+            self.read, self.write = client
+            self._session_ctx = ClientSession(self.read, self.write)
+            self.session = await self._session_ctx.__aenter__()
+            await self.session.initialize()
+            logger.info("Connected to MCP server")
+            return True
+        except Exception as e:
+            logger.error(f"Error connecting to MCP server: {e}")
+            return False
+
+    async def list_tools(self) -> Any:
+        if not self.session:
+            raise RuntimeError("Not connected. Call connect() first")
+        return await self.session.list_tools()
+
+    async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+        if not self.session:
+            raise RuntimeError("Not connected. Call connect() first")
+        return await self.session.call_tool(tool_name, arguments)
+```
+
+### Ollama API Client
+
+```python ollama_client.py
+import requests
+import json
+from typing import List, Dict, Any, Union
+
+class OllamaAPIClient:
+    def __init__(self, base_url: str = "http://localhost:11434"):
+        self.base_url = base_url
+
+    def check_connection(self) -> bool:
+        response = requests.get(f"{self.base_url}/api/tags")
+        if response.status_code != 200:
+            raise Exception(f"Error connecting: {response.status_code}")
+        return True
+
+    def chat(
+        self, 
+        model: str, 
+        messages: List[Dict[str, Any]], 
+        tools: List[Dict[str, Any]] = None,
+        options: Dict[str, Any] = None
+    ) -> Union[str, Dict[str, Any]]:
+        data = {
+            "model": model,
+            "messages": messages,
+            "stream": False
+        }
+        
+        if tools:
+            data["tools"] = tools
+
+        response = requests.post(
+            f"{self.base_url}/api/chat", 
+            json=data, 
+            timeout=60
+        )
+        
+        return self._process_response(response.text)
+
+    def _process_response(self, response_text: str):
+        lines = response_text.strip().split('\n')
+        full_response = ""
+        
+        for line in lines:
+            resp_json = json.loads(line)
+            
+            # Check for function call
+            if "message" in resp_json and "tool_calls" in resp_json["message"]:
+                function_call = resp_json["message"]["tool_calls"][0]
+                if function_call:
+                    return {
+                        "type": "function_call",
+                        "function_call": function_call
+                    }
+            
+            # Accumulate normal response
+            if "message" in resp_json and "content" in resp_json["message"]:
+                content = resp_json["message"].get("content")
+                if content:
+                    full_response += content
+        
+        return full_response
+```
+
+### Python Agent
+
+```python agent.py
+class OllamaAgent:
+    def __init__(
+        self, 
+        ollama_url: str = "http://localhost:11434",
+        mcp_command: str = "node",
+        mcp_args: List[str] = None
+    ):
+        self.ollama_client = OllamaAPIClient(ollama_url)
+        self.mcp_client = MCPClient(mcp_command, mcp_args or [])
+        self.toolsMCP = None
+
+    async def setup(self):
+        # Verify Ollama connection
+        self.ollama_client.check_connection()
+        
+        # Connect to MCP server
+        await self.mcp_client.__aenter__()
+        self.toolsMCP = await self.mcp_client.list_tools()
+
+    def get_all_tools(self):
+        tools = []
+        
+        if self.toolsMCP and hasattr(self.toolsMCP, 'tools'):
+            for mcp_tool in self.toolsMCP.tools:
+                tools.append({
+                    'type': 'function',
+                    'function': {
+                        'name': f"mcp_{mcp_tool.name}",
+                        'description': getattr(mcp_tool, 'description', f"MCP tool: {mcp_tool.name}"),
+                        'parameters': getattr(mcp_tool, 'inputSchema', {'type': 'object'})
+                    }
+                })
+        
+        return tools
+
+    def chat(self, model: str, messages: List[Dict], options: Dict = None):
+        tools = self.get_all_tools()
+        return self.ollama_client.chat(model, messages, tools, options)
+```
+
+## Usage Example
+
+### Interactive Chat
+
+```typescript
+async function interactiveChat(agent: OllamaAgent) {
+  const modelName = "mistral:latest";
+  const messages = [
+    {
+      role: "system",
+      content: "You are an agent with access to tools"
+    }
+  ];
+
+  while (true) {
+    const userMessage = await getUserInput();
+    messages.push({ role: "user", content: userMessage });
+
+    const response = await agent.chat(modelName, messages);
+
+    if (typeof response === 'object' && response.type === "function_call") {
+      // Execute the function
+      const functionName = response.function_call.function.name;
+      const functionArgs = JSON.parse(response.function_call.function.arguments);
+      
+      const result = await executeFunction(functionName, functionArgs, agent);
+      
+      // Add result to messages and get final response
+      messages.push({
+        role: "assistant",
+        content: null,
+        tool_calls: [response.function_call]
+      });
+      messages.push({
+        role: "tool",
+        content: result
+      });
+      
+      const finalResponse = await agent.chat(modelName, messages);
+      console.log(finalResponse);
+    } else {
+      console.log(response);
+    }
+  }
+}
+```
+
+## Running the Application
+
+### TypeScript
+
+```bash
+# Compile
+npm run build
+
+# Run
+node dist/ollamaApp.js
+```
+
+### Python
+
+```bash
+python ollama-python-app.py
+```
+
+## Key Concepts
+
+1. **Tool Conversion**: MCP tools are prefixed with `mcp_` and converted to Ollama's function format
+2. **Bidirectional Communication**: The agent handles both normal chat and function calls
+3. **Recursive Processing**: Function calls can trigger additional function calls
+4. **State Management**: Messages history maintains context across tool executions
+
+## Troubleshooting
+
+- Ensure Ollama is running: `ollama serve`
+- Check that your model supports function calling (e.g., mistral, llama3.1)
+- Verify MCP server path is correct
+- Check that all dependencies are installed
+
+## Next Steps
+
+- Explore the [Game of Thrones Quotes example](/examples/game-of-thrones-quotes)
+- Learn about [Todo Management](/examples/todo-management)
+- See [Production API Integration](/examples/edteam-api)

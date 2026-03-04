@@ -1,97 +1,292 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "MCP Course"
+description: "Learn the Model Context Protocol with practical examples in TypeScript, Python, and Go"
+mode: "custom"
 ---
 
-## Setting up
+<div className="relative overflow-hidden bg-gradient-to-br from-[#1e40af] via-[#2563eb] to-[#3b82f6] dark:from-[#0f1117] dark:via-[#1a1d27] dark:to-[#1e40af] py-20">
+  <div className="max-w-6xl mx-auto px-6 lg:px-8">
+    <div className="grid lg:grid-cols-12 gap-12 items-center">
+      <div className="lg:col-span-7">
+        <h1 className="text-5xl lg:text-6xl font-bold text-white dark:text-gray-100 mb-6">
+          Master the Model Context Protocol
+        </h1>
+        <p className="text-xl text-white/90 dark:text-gray-300 max-w-2xl mb-8">
+          A comprehensive course with hands-on examples to build MCP servers and clients in TypeScript, Python, and Go. Learn how to extend LLMs with custom tools, resources, and prompts.
+        </p>
+        <div className="flex flex-wrap gap-4">
+          <a 
+            href="/quickstart" 
+            className="inline-flex items-center px-6 py-3 bg-white text-[#2563eb] dark:bg-gray-100 dark:text-[#1e40af] font-semibold rounded-lg hover:bg-gray-100 dark:hover:bg-white transition-colors no-underline"
+          >
+            Get Started
+            <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+            </svg>
+          </a>
+          <a 
+            href="/concepts/mcp-protocol" 
+            className="inline-flex items-center px-6 py-3 border-2 border-white/30 bg-white/10 text-white font-semibold rounded-lg hover:bg-white/20 transition-colors no-underline"
+          >
+            Learn Concepts
+          </a>
+        </div>
+      </div>
+      <div className="lg:col-span-5 hidden lg:block">
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#2563eb] to-[#3b82f6] rounded-2xl blur-3xl opacity-30"></div>
+          <div className="relative bg-[#1a1d27] dark:bg-[#0f1117] border border-white/10 dark:border-[#27272a] rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-3 h-3 rounded-full bg-red-500"></div>
+              <div className="w-3 h-3 rounded-full bg-yellow-500"></div>
+              <div className="w-3 h-3 rounded-full bg-green-500"></div>
+            </div>
+            <pre className="text-sm text-gray-300 dark:text-gray-400"><code>{`// MCP Server Example
+server.tool(
+  "get_random_quotes",
+  { count: z.number() },
+  async ({ count }) => {
+    const quotes = await fetch();
+    return { content: quotes };
+  }
+);`}</code></pre>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-Get your documentation site up and running in minutes.
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Quick Start</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400 max-w-2xl mx-auto">
+      Get your first MCP server running in minutes with our step-by-step guide
+    </p>
+  </div>
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
+  <Steps>
+    <Step title="Clone the repository">
+      Clone the MCP Course repository to get access to all examples and implementations.
+      
+      ```bash
+      git clone https://github.com/alexyslozada/mcp-course.git
+      cd mcp-course
+      ```
+    </Step>
+    
+    <Step title="Choose your language">
+      The course includes implementations in three languages. Pick the one you're most comfortable with:
+      
+      - **TypeScript**: Modern Node.js server with the official MCP SDK
+      - **Python**: FastMCP server with simple decorator syntax
+      - **Go**: Native Go implementation with the mark3labs SDK
+      
+      Navigate to the appropriate directory:
+      
+      ```bash
+      # TypeScript
+      cd servers/basic
+      
+      # Python
+      cd servers/calculator-py
+      
+      # Go
+      cd servers/edteam-go
+      ```
+    </Step>
+    
+    <Step title="Install dependencies and run">
+      Install the required dependencies and start your first MCP server:
+      
+      <CodeGroup>
+      ```bash TypeScript
+      npm install
+      npm run build
+      npm start
+      ```
+      
+      ```bash Python
+      pip install mcp
+      python server.py
+      ```
+      
+      ```bash Go
+      go mod download
+      go run .
+      ```
+      </CodeGroup>
+      
+      <Note>
+        Your MCP server is now running! It communicates via stdio and can be connected to by any MCP-compatible client.
+      </Note>
+    </Step>
+    
+    <Step title="Test with a client">
+      Use one of the included client examples to interact with your server:
+      
+      ```bash
+      # TypeScript client
+      cd clients/basic-ts
+      npm install && npm start
+      
+      # Python client
+      cd clients/basic-py
+      python main.py
+      ```
+      
+      You'll see your server's tools, resources, and prompts in action!
+    </Step>
+  </Steps>
+</div>
 
-## Make it yours
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Explore by Topic</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Dive deep into MCP concepts and implementations
+    </p>
+  </div>
 
-Design a docs site that looks great and empowers your users.
+  <CardGroup cols={2}>
+    <Card title="MCP Protocol" icon="network-wired" href="/concepts/mcp-protocol">
+      Understand the core protocol, message types, and communication patterns
+    </Card>
+    <Card title="Build Servers" icon="server" href="/concepts/servers">
+      Learn how to create MCP servers that expose tools and resources
+    </Card>
+    <Card title="Create Clients" icon="laptop-code" href="/concepts/clients">
+      Connect to MCP servers and invoke tools from your applications
+    </Card>
+    <Card title="Tools & Resources" icon="wrench" href="/concepts/tools">
+      Expose functionality through tools and data through resources
+    </Card>
+    <Card title="TypeScript Examples" icon="js" href="/servers/basic-typescript">
+      Full-featured server with Game of Thrones quotes and math operations
+    </Card>
+    <Card title="Python Examples" icon="python" href="/servers/calculator-python">
+      Simple calculator server using FastMCP
+    </Card>
+    <Card title="Go Examples" icon="golang" href="/servers/edteam-go">
+      Production API integration with EDteam courses
+    </Card>
+    <Card title="Ollama Integration" icon="brain" href="/integrations/ollama">
+      Connect MCP to Ollama for local LLM function calling
+    </Card>
+  </CardGroup>
+</div>
 
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
-  </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="text-center mb-12">
+    <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-4">Real-World Examples</h2>
+    <p className="text-lg text-gray-600 dark:text-gray-400">
+      Working code examples you can learn from and build upon
+    </p>
+  </div>
 
-## Create beautiful pages
+  <div className="grid md:grid-cols-2 gap-6">
+    <a 
+      href="/examples/game-of-thrones-quotes" 
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#2563eb] dark:hover:border-[#2563eb] overflow-hidden transition-colors no-underline"
+    >
+      <div className="h-48 bg-gradient-to-br from-[#2563eb]/10 to-[#3b82f6]/10 dark:from-[#1e40af]/20 dark:to-[#2563eb]/20 flex items-center justify-center">
+        <div className="text-6xl">🐉</div>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Game of Thrones Quotes</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Fetch and analyze quotes from the GoT API. Includes tools, resources, and prompts.
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          View Example
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
 
-Everything you need to create world-class documentation.
+    <a 
+      href="/examples/calculator-operations" 
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#2563eb] dark:hover:border-[#2563eb] overflow-hidden transition-colors no-underline"
+    >
+      <div className="h-48 bg-gradient-to-br from-[#2563eb]/10 to-[#3b82f6]/10 dark:from-[#1e40af]/20 dark:to-[#2563eb]/20 flex items-center justify-center">
+        <div className="text-6xl">🧮</div>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Calculator Operations</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Basic math operations through MCP. Perfect introduction to building tools.
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          View Example
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+    <a 
+      href="/examples/todo-management" 
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#2563eb] dark:hover:border-[#2563eb] overflow-hidden transition-colors no-underline"
+    >
+      <div className="h-48 bg-gradient-to-br from-[#2563eb]/10 to-[#3b82f6]/10 dark:from-[#1e40af]/20 dark:to-[#2563eb]/20 flex items-center justify-center">
+        <div className="text-6xl">✅</div>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Todo Management</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Full CRUD operations with state management. Shows real application patterns.
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          View Example
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
 
-## Need inspiration?
+    <a 
+      href="/examples/edteam-api" 
+      className="group block rounded-2xl border border-gray-200 dark:border-[#27272a] hover:border-[#2563eb] dark:hover:border-[#2563eb] overflow-hidden transition-colors no-underline"
+    >
+      <div className="h-48 bg-gradient-to-br from-[#2563eb]/10 to-[#3b82f6]/10 dark:from-[#1e40af]/20 dark:to-[#2563eb]/20 flex items-center justify-center">
+        <div className="text-6xl">🎓</div>
+      </div>
+      <div className="p-6 bg-white dark:bg-[#1a1d27]">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">EDteam API Integration</h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Production-ready Go server integrating with a real API. Authentication and data handling.
+        </p>
+        <div className="flex items-center text-sm font-medium text-[#2563eb] group-hover:text-[#1e40af]">
+          View Example
+          <svg className="ml-1 w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+          </svg>
+        </div>
+      </div>
+    </a>
+  </div>
+</div>
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+<div className="mt-16 mb-16 max-w-5xl mx-auto px-6">
+  <div className="rounded-2xl bg-gradient-to-r from-[#2563eb] to-[#3b82f6] dark:from-[#1e40af] dark:to-[#2563eb] p-8 lg:p-12 text-center">
+    <h2 className="text-3xl font-bold text-white mb-4">
+      Ready to Build with MCP?
+    </h2>
+    <p className="text-lg text-white/90 max-w-2xl mx-auto mb-8">
+      Start with our quickstart guide and have your first MCP server running in less than 5 minutes.
+    </p>
+    <a 
+      href="/quickstart" 
+      className="inline-flex items-center px-6 py-3 bg-white text-[#2563eb] dark:bg-gray-100 dark:text-[#1e40af] font-semibold rounded-lg hover:bg-gray-100 dark:hover:bg-white transition-colors no-underline"
+    >
+      Get Started Now
+      <svg className="ml-2 w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+      </svg>
+    </a>
+  </div>
+</div>

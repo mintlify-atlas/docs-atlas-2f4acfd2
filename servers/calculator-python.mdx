@@ -1,0 +1,390 @@
+---
+title: Calculator Python Server
+description: A simple MCP server built with FastMCP demonstrating calculator operations in Python
+---
+
+The Calculator Python server demonstrates building MCP servers with Python using the FastMCP framework. It provides basic arithmetic operations through a unified calculator tool.
+
+## Features
+
+- **FastMCP Framework**: Simplified Python MCP development
+- **Arithmetic Operations**: Add, subtract, multiply, divide
+- **Error Handling**: Division by zero protection
+- **Minimal Setup**: Quick to install and configure
+
+## Installation
+
+<Steps>
+  <Step title="Prerequisites">
+    Ensure you have Python 3.13+ installed:
+    ```bash
+    python --version
+    ```
+  </Step>
+
+  <Step title="Navigate to Directory">
+    ```bash
+    cd servers/calculator-py
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install using uv (recommended) or pip:
+    
+    <CodeGroup>
+    ```bash uv
+    uv sync
+    ```
+    
+    ```bash pip
+    pip install "mcp[cli]>=1.6.0"
+    ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Configure MCP Client">
+    Add to your MCP client configuration:
+    ```json
+    {
+      "mcpServers": {
+        "calculator-py": {
+          "command": "uv",
+          "args": [
+            "--directory",
+            "/path/to/servers/calculator-py",
+            "run",
+            "server.py"
+          ]
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Tools
+
+### calculate
+
+Perform arithmetic operations on two numbers.
+
+**Parameters:**
+- `a` (float): First number
+- `b` (float): Second number
+- `operation` (string): Operation to perform - `add`, `subtract`, `multiply`, or `divide`
+
+**Example Usage:**
+
+<CodeGroup>
+```json Addition
+{
+  "a": 15,
+  "b": 7,
+  "operation": "add"
+}
+// Returns: 22.0
+```
+
+```json Subtraction
+{
+  "a": 15,
+  "b": 7,
+  "operation": "subtract"
+}
+// Returns: 8.0
+```
+
+```json Multiplication
+{
+  "a": 15,
+  "b": 7,
+  "operation": "multiply"
+}
+// Returns: 105.0
+```
+
+```json Division
+{
+  "a": 15,
+  "b": 3,
+  "operation": "divide"
+}
+// Returns: 5.0
+```
+</CodeGroup>
+
+## Implementation
+
+### Server Setup
+
+The server uses FastMCP for simplified MCP server creation:
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Calculator MCP Server")
+```
+
+### Arithmetic Functions
+
+Core calculator operations:
+
+```python
+def add(a: float, b: float) -> float:
+    return float(a + b)
+
+def subtract(a: float, b: float) -> float:
+    return float(a - b)
+
+def multiply(a: float, b: float) -> float:
+    return float(a * b)
+
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("No se puede dividir por cero")
+    return float(a / b)
+```
+
+### Calculator Tool
+
+Unified tool that routes to specific operations:
+
+```python
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    """Perform arithmetic operations on two numbers.
+    
+    Args:
+        a: First number
+        b: Second number
+        operation: Operation to perform (add, subtract, multiply, divide)
+        
+    Returns:
+        Result of the calculation
+        
+    Raises:
+        ValueError: If operation is invalid or division by zero
+    """
+    if operation == "add":
+        return add(a, b)
+    elif operation == "subtract":
+        return subtract(a, b)
+    elif operation == "multiply":
+        return multiply(a, b)
+    elif operation == "divide":
+        return divide(a, b)
+    else:
+        raise ValueError("Operación no válida")
+```
+
+### Running the Server
+
+```python
+if __name__ == "__main__":
+    mcp.run(transport='stdio')
+```
+
+## Complete Server Code
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Calculator MCP Server")
+
+def add(a: float, b: float) -> float:
+    return float(a + b)
+
+def subtract(a: float, b: float) -> float:
+    return float(a - b)
+
+def multiply(a: float, b: float) -> float:
+    return float(a * b)
+
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("No se puede dividir por cero")
+    return float(a / b)
+
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    if operation == "add":
+        return add(a, b)
+    elif operation == "subtract":
+        return subtract(a, b)
+    elif operation == "multiply":
+        return multiply(a, b)
+    elif operation == "divide":
+        return divide(a, b)
+    else:
+        raise ValueError("Operación no válida")
+
+if __name__ == "__main__":
+    mcp.run(transport='stdio')
+```
+
+## Error Handling
+
+The calculator includes built-in error handling:
+
+### Division by Zero
+
+```python
+# This will raise an error
+{
+  "a": 10,
+  "b": 0,
+  "operation": "divide"
+}
+# Error: "No se puede dividir por cero"
+```
+
+### Invalid Operation
+
+```python
+# This will raise an error
+{
+  "a": 10,
+  "b": 5,
+  "operation": "modulo"
+}
+# Error: "Operación no válida"
+```
+
+## FastMCP Benefits
+
+FastMCP simplifies MCP server development:
+
+<CardGroup cols={2}>
+  <Card title="Decorator-Based" icon="at">
+    Use `@mcp.tool()` decorator to register tools automatically
+  </Card>
+  <Card title="Type Hints" icon="code">
+    Python type hints automatically define parameter schemas
+  </Card>
+  <Card title="Built-in Transport" icon="server">
+    Stdio transport configured with `mcp.run(transport='stdio')`
+  </Card>
+  <Card title="Error Handling" icon="shield">
+    Automatic error serialization and reporting
+  </Card>
+</CardGroup>
+
+## Dependencies
+
+**pyproject.toml:**
+```toml
+[project]
+name = "calculator-py"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "mcp[cli]>=1.6.0",
+]
+```
+
+**Key Package:**
+- `mcp[cli]>=1.6.0` - MCP SDK with CLI tools and FastMCP framework
+
+## Testing the Server
+
+You can test the calculator using the MCP inspector:
+
+```bash
+uv run mcp dev server.py
+```
+
+Or test directly in your MCP client:
+
+```
+User: Calculate 144 divided by 12
+Assistant: [Uses calculate tool]
+Result: 12.0
+```
+
+## Extending the Calculator
+
+Add more operations by defining new functions and updating the tool:
+
+```python
+def modulo(a: float, b: float) -> float:
+    return float(a % b)
+
+def power(a: float, b: float) -> float:
+    return float(a ** b)
+
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    operations = {
+        "add": add,
+        "subtract": subtract,
+        "multiply": multiply,
+        "divide": divide,
+        "modulo": modulo,
+        "power": power
+    }
+    
+    if operation not in operations:
+        raise ValueError(f"Operación no válida: {operation}")
+    
+    return operations[operation](a, b)
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Python version error">
+    This server requires Python 3.13+. Check your version:
+    ```bash
+    python --version
+    ```
+    
+    Install Python 3.13+ from [python.org](https://python.org) if needed.
+  </Accordion>
+
+  <Accordion title="uv not found">
+    Install uv for faster dependency management:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+    
+    Or use pip instead:
+    ```bash
+    pip install "mcp[cli]>=1.6.0"
+    python server.py
+    ```
+  </Accordion>
+
+  <Accordion title="Import errors">
+    Ensure mcp package is installed:
+    ```bash
+    uv pip list | grep mcp
+    ```
+    
+    Reinstall if needed:
+    ```bash
+    uv sync --reinstall
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Project Structure
+
+```
+calculator-py/
+├── server.py             # Main server implementation
+├── pyproject.toml        # Project configuration and dependencies
+├── uv.lock              # Locked dependency versions
+├── .python-version      # Python version specification
+└── README.md            # Documentation
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic TypeScript" icon="code" href="/servers/basic-typescript">
+    Explore advanced MCP features with TypeScript
+  </Card>
+  <Card title="EDteam Go Server" icon="graduation-cap" href="/servers/edteam-go">
+    Learn about API integration with Go MCP servers
+  </Card>
+</CardGroup>

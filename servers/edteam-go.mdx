@@ -1,0 +1,606 @@
+---
+title: EDteam Go Server
+description: An MCP server built with Go demonstrating external API integration and authentication
+---
+
+The EDteam Go server showcases building MCP servers in Go with the `mcp-go` library. It integrates with the EDteam API to manage courses, subscriptions, and shopping cart operations.
+
+## Features
+
+- **Go Implementation**: Built with `mcp-go` SDK
+- **API Integration**: EDteam educational platform API
+- **Authentication**: Token-based authentication flow
+- **Three Tools**: Subscriptions, course listing, shopping cart
+- **Environment Configuration**: Credential management via env vars
+
+## Installation
+
+<Steps>
+  <Step title="Prerequisites">
+    Ensure you have Go 1.24.1+ installed:
+    ```bash
+    go version
+    ```
+  </Step>
+
+  <Step title="Navigate to Directory">
+    ```bash
+    cd servers/edteam-go
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    ```bash
+    go mod download
+    ```
+  </Step>
+
+  <Step title="Set Environment Variables">
+    Create a `.env` file or export variables:
+    ```bash
+    export EMAIL="your-edteam-email@example.com"
+    export PASSWORD="your-edteam-password"
+    ```
+  </Step>
+
+  <Step title="Build the Server">
+    ```bash
+    go build -o edteam-server
+    ```
+  </Step>
+
+  <Step title="Configure MCP Client">
+    Add to your MCP client configuration:
+    ```json
+    {
+      "mcpServers": {
+        "edteam-go": {
+          "command": "/path/to/servers/edteam-go/edteam-server",
+          "env": {
+            "EMAIL": "your-email@example.com",
+            "PASSWORD": "your-password"
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Authentication
+
+The server authenticates on startup using EDteam credentials:
+
+```go
+func main() {
+	log.SetOutput(os.Stderr)
+
+	email := os.Getenv("EMAIL")
+	password := os.Getenv("PASSWORD")
+	if email == "" || password == "" {
+		panic("EMAIL and PASSWORD environment variables must be set")
+	}
+
+	ctx := context.Background()
+	token, err := ProcessLogin(ctx, email, password)
+	if err != nil {
+		panic(err)
+	}
+
+	// Token is now available for all API calls
+}
+```
+
+### Login Implementation
+
+```go
+func ProcessLogin(ctx context.Context, email, password string) (string, error) {
+	login := Login{
+		Email:    email,
+		Password: password,
+	}
+
+	// Make the request
+	urlLogin := "https://api.ed.team/api/v1/login"
+	statusCode, responseBody, err := Request(ctx, http.MethodPost, urlLogin, "", login)
+	if err != nil {
+		return "", err
+	}
+	if statusCode != http.StatusOK {
+		return "", fmt.Errorf("unexpected status code: %d", statusCode)
+	}
+	
+	// Parse the response
+	var response LoginResponse
+	err = json.Unmarshal(responseBody, &response)
+	if err != nil {
+		return "", fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return response.Data.Token, nil
+}
+```
+
+## Tools
+
+### Subscriptions
+
+List all historical subscriptions from your EDteam account.
+
+**Parameters:** None
+
+**Example Response:**
+```json
+{
+  "data": [
+    {
+      "id": 12345,
+      "plan_name": "Premium",
+      "start_date": "2024-01-01",
+      "end_date": "2024-12-31",
+      "status": "active"
+    }
+  ]
+}
+```
+
+**Implementation:**
+```go
+subscriptionsTool := mcp.NewTool(
+	"Subscriptions",
+	mcp.WithDescription("List all your subscriptions in the history of EDteam"),
+)
+
+s.AddTool(subscriptionsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	subscriptions, err := GetSubscription(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+	var subscriptionsRaw []byte
+	subscriptionsRaw, err = json.Marshal(subscriptions)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcp.NewToolResultText(string(subscriptionsRaw)), nil
+})
+```
+
+**API Function:**
+```go
+func GetSubscription(ctx context.Context, token string) (SubscriptionResponse, error) {
+	urlSubscriptions := "https://api.ed.team/api/v1/subscriptions/historical"
+	statusCode, responseBody, err := Request(ctx, http.MethodGet, urlSubscriptions, token, nil)
+	if err != nil {
+		return SubscriptionResponse{}, err
+	}
+	if statusCode != http.StatusOK {
+		return SubscriptionResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+	}
+	
+	// Parse the response
+	var subscriptions SubscriptionResponse
+	err = json.Unmarshal(responseBody, &subscriptions)
+	if err != nil {
+		return SubscriptionResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
+	}
+
+	return subscriptions, nil
+}
+```
+
+### Courses-List
+
+List available courses from EDteam with pagination.
+
+**Parameters:**
+- `page` (number, optional): Page number (default: 1)
+- `limit` (number, optional): Number of courses per page (1-10, default: 10)
+
+**Example:**
+```json
+{
+  "page": 2,
+  "limit": 5
+}
+```
+
+**Implementation:**
+```go
+coursesListTool := mcp.NewTool(
+	"Courses-List",
+	mcp.WithDescription("List all courses of EDteam"),
+	mcp.WithNumber("page", mcp.Description("Page number"), mcp.DefaultNumber(1)),
+	mcp.WithNumber("limit", mcp.Description("Limit number of courses"), mcp.DefaultNumber(10)),
+)
+
+s.AddTool(coursesListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	page, ok := request.Params.Arguments["page"].(float64)
+	if !ok {
+		page = 1
+	}
+	limit, ok := request.Params.Arguments["limit"].(float64)
+	if !ok || limit <= 0 || limit > 10 {
+		limit = 10
+	}
+
+	courses, err := GetCourses(ctx, uint(page), uint(limit))
+	if err != nil {
+		return nil, err
+	}
+
+	var coursesRaw []byte
+	coursesRaw, err = json.Marshal(courses)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcp.NewToolResultText(string(coursesRaw)), nil
+})
+```
+
+### Shopping-Cart-Add-Course
+
+Add a course to your shopping cart.
+
+**Parameters:**
+- `course_id` (number, required): The course ID to add
+
+**Example:**
+```json
+{
+  "course_id": 42
+}
+```
+
+**Implementation:**
+```go
+shoppingCartTool := mcp.NewTool(
+	"Shopping-Cart-Add-Course",
+	mcp.WithDescription("Add a course to your shopping cart"),
+	mcp.WithNumber("course_id", mcp.Description("Course ID"), mcp.DefaultNumber(0), mcp.Required()),
+)
+
+s.AddTool(shoppingCartTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	courseID, ok := request.Params.Arguments["course_id"].(float64)
+	if !ok {
+		return nil, fmt.Errorf("course_id must be a number")
+	}
+
+	shoppingCart, err := AddCourseToShoppingCart(ctx, token, int(courseID))
+	if err != nil {
+		return nil, err
+	}
+
+	var shoppingCartRaw []byte
+	shoppingCartRaw, err = json.Marshal(shoppingCart)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcp.NewToolResultText(string(shoppingCartRaw)), nil
+})
+```
+
+## Server Configuration
+
+```go
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"os"
+
+	"github.com/mark3labs/mcp-go/mcp"
+	"github.com/mark3labs/mcp-go/server"
+)
+
+func main() {
+	log.SetOutput(os.Stderr)
+
+	// Authenticate
+	email := os.Getenv("EMAIL")
+	password := os.Getenv("PASSWORD")
+	if email == "" || password == "" {
+		panic("EMAIL and PASSWORD environment variables must be set")
+	}
+
+	ctx := context.Background()
+	token, err := ProcessLogin(ctx, email, password)
+	if err != nil {
+		panic(err)
+	}
+
+	// Create MCP server
+	s := server.NewMCPServer(
+		"EDteam API",
+		"1.0.0",
+		server.WithToolCapabilities(false),
+		server.WithLogging(),
+	)
+
+	// Add tools...
+
+	// Start server
+	if err := server.ServeStdio(s); err != nil {
+		panic(err)
+	}
+}
+```
+
+## HTTP Request Helper
+
+Generic HTTP request function used by all API calls:
+
+```go
+func Request(ctx context.Context, method, url, token string, body interface{}) (int, []byte, error) {
+	var reqBody io.Reader
+	if body != nil {
+		jsonData, err := json.Marshal(body)
+		if err != nil {
+			return 0, nil, fmt.Errorf("failed to marshal request body: %w", err)
+		}
+		reqBody = bytes.NewBuffer(jsonData)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	if token != "" {
+		req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+	}
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return 0, nil, fmt.Errorf("failed to send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return resp.StatusCode, nil, fmt.Errorf("failed to read response body: %w", err)
+	}
+
+	return resp.StatusCode, responseBody, nil
+}
+```
+
+## Usage Examples
+
+### List Your Subscriptions
+
+```
+User: Show me my EDteam subscriptions
+Assistant: [Uses Subscriptions tool]
+You have 2 subscriptions:
+1. Premium Plan - Active (Jan 2024 - Dec 2024)
+2. Basic Plan - Expired (Jan 2023 - Dec 2023)
+```
+
+### Browse Courses
+
+```
+User: Show me 5 courses from EDteam
+Assistant: [Uses Courses-List with page=1, limit=5]
+Here are 5 courses:
+1. Introduction to Go Programming
+2. Advanced TypeScript Patterns
+3. Building REST APIs
+4. Database Design Fundamentals
+5. DevOps with Docker
+```
+
+### Add to Cart
+
+```
+User: Add course 42 to my shopping cart
+Assistant: [Uses Shopping-Cart-Add-Course with course_id=42]
+Course added to your shopping cart successfully!
+```
+
+## Dependencies
+
+**go.mod:**
+```go
+module edteam-mcp
+
+go 1.24.1
+
+require github.com/mark3labs/mcp-go v0.18.0
+
+require (
+	github.com/google/uuid v1.6.0 // indirect
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+)
+```
+
+**Key Packages:**
+- `github.com/mark3labs/mcp-go` - MCP SDK for Go
+- `github.com/google/uuid` - UUID generation
+- `github.com/yosida95/uritemplate/v3` - URI template parsing
+
+## Project Structure
+
+```
+edteam-go/
+├── main.go              # Server initialization and tool registration
+├── login.go             # Authentication logic
+├── subscription.go      # Subscription API calls
+├── courses.go           # Course listing API
+├── shopping-cart.go     # Shopping cart operations
+├── models.go            # Data structures
+├── http.go              # HTTP request helper
+├── go.mod               # Module definition
+└── go.sum               # Dependency checksums
+```
+
+## Security Considerations
+
+<Warning>
+  **Never commit credentials to version control**. Use environment variables or secure credential management systems.
+</Warning>
+
+<CardGroup cols={2}>
+  <Card title="Environment Variables" icon="key">
+    Store credentials in `.env` files (gitignored) or MCP client config
+  </Card>
+  <Card title="Token Security" icon="shield">
+    Authentication token is kept in memory only during server runtime
+  </Card>
+  <Card title="HTTPS Only" icon="lock">
+    All API calls use HTTPS to the EDteam API
+  </Card>
+  <Card title="Error Handling" icon="triangle-exclamation">
+    Avoid logging sensitive data in error messages
+  </Card>
+</CardGroup>
+
+## Extending the Server
+
+### Add New API Endpoint
+
+```go
+// 1. Create API function
+func GetUserProfile(ctx context.Context, token string) (ProfileResponse, error) {
+	url := "https://api.ed.team/api/v1/profile"
+	statusCode, responseBody, err := Request(ctx, http.MethodGet, url, token, nil)
+	if err != nil {
+		return ProfileResponse{}, err
+	}
+	if statusCode != http.StatusOK {
+		return ProfileResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+	}
+
+	var profile ProfileResponse
+	err = json.Unmarshal(responseBody, &profile)
+	return profile, err
+}
+
+// 2. Register as MCP tool
+profileTool := mcp.NewTool(
+	"User-Profile",
+	mcp.WithDescription("Get your EDteam user profile"),
+)
+
+s.AddTool(profileTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	profile, err := GetUserProfile(ctx, token)
+	if err != nil {
+		return nil, err
+	}
+
+	profileRaw, err := json.Marshal(profile)
+	if err != nil {
+		return nil, err
+	}
+
+	return mcp.NewToolResultText(string(profileRaw)), nil
+})
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Authentication failed">
+    Verify your EMAIL and PASSWORD environment variables are correct:
+    ```bash
+    echo $EMAIL
+    echo $PASSWORD
+    ```
+    
+    Test login manually via the EDteam website to confirm credentials.
+  </Accordion>
+
+  <Accordion title="Go version mismatch">
+    This server requires Go 1.24.1+:
+    ```bash
+    go version
+    ```
+    
+    Update Go from [go.dev/dl](https://go.dev/dl) if needed.
+  </Accordion>
+
+  <Accordion title="Module dependency issues">
+    Clean and reinstall dependencies:
+    ```bash
+    go clean -modcache
+    go mod download
+    go build
+    ```
+  </Accordion>
+
+  <Accordion title="API rate limiting">
+    The EDteam API may have rate limits. Implement exponential backoff for production use:
+    ```go
+    func RequestWithRetry(ctx context.Context, method, url, token string, body interface{}) (int, []byte, error) {
+        maxRetries := 3
+        for i := 0; i < maxRetries; i++ {
+            status, resp, err := Request(ctx, method, url, token, body)
+            if status != http.StatusTooManyRequests {
+                return status, resp, err
+            }
+            time.Sleep(time.Second * time.Duration(math.Pow(2, float64(i))))
+        }
+        return 0, nil, fmt.Errorf("max retries exceeded")
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Go MCP Patterns
+
+### Tool Parameter Handling
+
+```go
+// Type assertion with defaults
+page, ok := request.Params.Arguments["page"].(float64)
+if !ok {
+	page = 1
+}
+
+// Required parameters
+courseID, ok := request.Params.Arguments["course_id"].(float64)
+if !ok {
+	return nil, fmt.Errorf("course_id is required and must be a number")
+}
+```
+
+### Error Handling
+
+```go
+// Return errors from tool handlers
+if err != nil {
+	return nil, fmt.Errorf("failed to fetch courses: %w", err)
+}
+
+// Server-level panics for fatal errors
+if token == "" {
+	panic("authentication failed")
+}
+```
+
+### Context Usage
+
+```go
+// Pass context through all API calls
+func GetCourses(ctx context.Context, page, limit uint) (CoursesResponse, error) {
+	// Use ctx for cancellation and timeouts
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	// ...
+}
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Basic TypeScript" icon="code" href="/servers/basic-typescript">
+    Explore prompts and resources with TypeScript
+  </Card>
+  <Card title="Calculator Python" icon="calculator" href="/servers/calculator-python">
+    See how FastMCP simplifies Python server development
+  </Card>
+</CardGroup>

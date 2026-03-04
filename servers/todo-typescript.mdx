@@ -1,0 +1,622 @@
+---
+title: Todo TypeScript Server
+description: A full-featured MCP server demonstrating CRUD operations and service architecture with TypeScript
+---
+
+The Todo TypeScript server showcases a complete CRUD (Create, Read, Update, Delete) application built with MCP. It demonstrates service-oriented architecture and state management patterns.
+
+## Features
+
+- **Complete CRUD Operations**: Create, list, update, complete, and delete todos
+- **Service Architecture**: Separated business logic from MCP handlers
+- **In-Memory Storage**: Simple state management for learning
+- **TypeScript Types**: Fully typed implementation
+- **Six Tools**: Comprehensive todo management
+
+## Installation
+
+<Steps>
+  <Step title="Navigate to Directory">
+    ```bash
+    cd servers/todo-ts
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Build the Server">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Configure MCP Client">
+    Add to your MCP client configuration:
+    ```json
+    {
+      "mcpServers": {
+        "todo-ts": {
+          "command": "node",
+          "args": ["/path/to/servers/todo-ts/build/index.js"]
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Data Model
+
+The Todo interface defines the structure of todo items:
+
+```typescript
+export interface Todo {
+  id: string;              // Unique identifier
+  task: string;            // Task description
+  completed: boolean;      // Completion status
+  createdAt: Date;         // Creation timestamp
+  completedAt?: Date;      // Completion timestamp (optional)
+}
+```
+
+## Tools
+
+### TODO-Create
+
+Create a new todo item.
+
+**Parameters:**
+- `task` (string): The task description
+
+**Example:**
+```json
+{
+  "task": "Learn MCP protocol"
+}
+```
+
+**Response:**
+```
+Todo created: Learn MCP protocol
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-Create",
+  "Create a new todo item",
+  {
+    task: z.string().describe("The task to add to the todo list"),
+  },
+  async ({task}) => {
+    const todo = createTodo(task);
+    return {
+      content: [{
+        type: "text",
+        text: `Todo created: ${todo.task}`,
+      }],
+    };
+  }
+);
+```
+
+### TODO-List
+
+List all todo items.
+
+**Parameters:** None
+
+**Example Response:**
+```json
+[
+  {
+    "id": "abc123",
+    "task": "Learn MCP protocol",
+    "completed": false,
+    "createdAt": "2026-03-04T10:30:00.000Z"
+  },
+  {
+    "id": "def456",
+    "task": "Build MCP server",
+    "completed": true,
+    "createdAt": "2026-03-04T09:15:00.000Z",
+    "completedAt": "2026-03-04T11:45:00.000Z"
+  }
+]
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-List",
+  "List all todo items",
+  {},
+  async () => {
+    const todos = getAllTodos();
+    return {
+      content: [{type: "text", text: JSON.stringify(todos, null, 2)}],
+    };
+  }
+);
+```
+
+### TODO-Complete
+
+Mark a todo item as completed.
+
+**Parameters:**
+- `id` (string): The todo item ID
+
+**Example:**
+```json
+{
+  "id": "abc123"
+}
+```
+
+**Response:**
+```
+Todo completed: Learn MCP protocol
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-Complete",
+  "Complete a todo item",
+  {
+    id: z.string().describe("The id of the todo item to complete"),
+  },  
+  async ({id}) => {
+    const todo = completeTodo(id);
+    return {
+      content: [{type: "text", text: `Todo completed: ${todo?.task}`}],
+    };
+  }
+);
+```
+
+### TODO-Update
+
+Update a todo item's task description.
+
+**Parameters:**
+- `id` (string): The todo item ID
+- `task` (string): New task description
+
+**Example:**
+```json
+{
+  "id": "abc123",
+  "task": "Master the MCP protocol"
+}
+```
+
+**Response:**
+```
+Todo updated: Master the MCP protocol
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-Update",
+  "Update a todo item",
+  {
+    id: z.string().describe("The id of the todo item to update"),
+    task: z.string().describe("The new task for the todo item"),
+  },
+  async ({id, task}) => {
+    const todo = updateTodoTask(id, task);
+    return {
+      content: [{type: "text", text: `Todo updated: ${todo?.task}`}],
+    };
+  }
+);
+```
+
+### TODO-Delete
+
+Delete a todo item.
+
+**Parameters:**
+- `id` (string): The todo item ID
+
+**Example:**
+```json
+{
+  "id": "abc123"
+}
+```
+
+**Response:**
+```
+Todo deleted: Success
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-Delete",
+  "Delete a todo item",
+  {
+    id: z.string().describe("The id of the todo item to delete"),
+  },
+  async ({id}) => {
+    const success = deleteTodo(id);
+    return {
+      content: [{type: "text", text: `Todo deleted: ${success ? "Success" : "Failed"}`}],
+    };
+  }
+);
+```
+
+### TODO-ClearCompleted
+
+Remove all completed todo items.
+
+**Parameters:** None
+
+**Response:**
+```
+All completed todos cleared
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "TODO-ClearCompleted",
+  "Clear all completed todo items",
+  {},
+  async () => {
+    clearCompletedTodos();
+    return {
+      content: [{type: "text", text: "All completed todos cleared"}],
+    };
+  }
+);
+```
+
+## Service Layer
+
+The todo service (`todo.service.ts`) handles all business logic:
+
+### State Management
+
+```typescript
+// In-memory storage for todos
+let todos: Todo[] = [];
+
+// Helper function to generate unique IDs
+const generateId = (): string => {
+  return Math.random().toString(36).substring(2) + Date.now().toString(36);
+};
+```
+
+### Create Todo
+
+```typescript
+export const createTodo = (task: string): Todo => {
+  const newTodo: Todo = {
+    id: generateId(),
+    task,
+    completed: false,
+    createdAt: new Date(),
+  };
+  
+  todos.push(newTodo);
+  return newTodo;
+};
+```
+
+### Get All Todos
+
+```typescript
+export const getAllTodos = (): Todo[] => {
+  return [...todos];  // Return copy to prevent external mutations
+};
+```
+
+### Get Todo by ID
+
+```typescript
+export const getTodoById = (id: string): Todo | undefined => {
+  return todos.find(todo => todo.id === id);
+};
+```
+
+### Complete Todo
+
+```typescript
+export const completeTodo = (id: string): Todo | undefined => {
+  const todo = todos.find(todo => todo.id === id);
+  if (todo) {
+    todo.completed = true;
+    todo.completedAt = new Date();
+  }
+  return todo;
+};
+```
+
+### Delete Todo
+
+```typescript
+export const deleteTodo = (id: string): boolean => {
+  const initialLength = todos.length;
+  todos = todos.filter(todo => todo.id !== id);
+  return todos.length !== initialLength;
+};
+```
+
+### Update Todo Task
+
+```typescript
+export const updateTodoTask = (id: string, newTask: string): Todo | undefined => {
+  const todo = todos.find(todo => todo.id === id);
+  if (todo) {
+    todo.task = newTask;
+  }
+  return todo;
+};
+```
+
+### Filter Helpers
+
+```typescript
+// Get all completed todos
+export const getCompletedTodos = (): Todo[] => {
+  return todos.filter(todo => todo.completed);
+};
+
+// Get all pending todos
+export const getPendingTodos = (): Todo[] => {
+  return todos.filter(todo => !todo.completed);
+};
+
+// Clear all completed todos
+export const clearCompletedTodos = (): void => {
+  todos = todos.filter(todo => !todo.completed);
+};
+```
+
+## Server Configuration
+
+```typescript
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import {
+  createTodo,
+  getAllTodos,
+  clearCompletedTodos,
+  completeTodo,
+  deleteTodo,
+  updateTodoTask
+} from "./todo/todo.service.js";
+
+// Create server instance
+const server = new McpServer({
+  name: "TODO List MCP Server",
+  version: "1.0.0",
+  capabilities: {
+    tools: {},
+  },
+});
+
+// ... tool definitions ...
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+  console.error("[INFO] TODO MCP Server running on stdio");
+}
+
+main().catch((error) => {
+  console.error("[ERROR] Fatal error in main():", error);
+  process.exit(1);
+});
+```
+
+## Usage Examples
+
+### Create and Manage Todos
+
+```typescript
+// Create a new todo
+const newTodo = await client.callTool("TODO-Create", {
+  task: "Implement MCP server"
+});
+
+// List all todos
+const allTodos = await client.callTool("TODO-List", {});
+
+// Update a todo
+const updated = await client.callTool("TODO-Update", {
+  id: "abc123",
+  task: "Complete MCP server implementation"
+});
+
+// Mark as completed
+const completed = await client.callTool("TODO-Complete", {
+  id: "abc123"
+});
+
+// Clear completed items
+await client.callTool("TODO-ClearCompleted", {});
+```
+
+### Conversational Usage
+
+```
+User: Add a todo to learn about MCP resources
+Assistant: [Uses TODO-Create]
+Todo created: Learn about MCP resources
+
+User: What are my current todos?
+Assistant: [Uses TODO-List]
+You have 3 todos:
+1. Learn about MCP resources (pending)
+2. Build a calculator server (completed)
+3. Study TypeScript patterns (pending)
+
+User: Mark the first one as done
+Assistant: [Uses TODO-Complete]
+Todo completed: Learn about MCP resources
+```
+
+## Architecture Benefits
+
+<CardGroup cols={2}>
+  <Card title="Separation of Concerns" icon="layer-group">
+    Business logic isolated in service layer, MCP handlers stay thin
+  </Card>
+  <Card title="Testability" icon="flask">
+    Service functions can be unit tested independently
+  </Card>
+  <Card title="Reusability" icon="recycle">
+    Service functions can be used by multiple tools or other services
+  </Card>
+  <Card title="Maintainability" icon="wrench">
+    Clear structure makes code easier to understand and modify
+  </Card>
+</CardGroup>
+
+## Dependencies
+
+```json
+{
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "zod": "^3.24.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+## Extending the Server
+
+### Add Priority Levels
+
+```typescript
+// Update interface
+export interface Todo {
+  id: string;
+  task: string;
+  completed: boolean;
+  priority: 'low' | 'medium' | 'high';
+  createdAt: Date;
+  completedAt?: Date;
+}
+
+// Update create function
+export const createTodo = (task: string, priority: string = 'medium'): Todo => {
+  const newTodo: Todo = {
+    id: generateId(),
+    task,
+    completed: false,
+    priority: priority as 'low' | 'medium' | 'high',
+    createdAt: new Date(),
+  };
+  
+  todos.push(newTodo);
+  return newTodo;
+};
+
+// Update tool
+server.tool(
+  "TODO-Create",
+  "Create a new todo item",
+  {
+    task: z.string().describe("The task to add"),
+    priority: z.enum(['low', 'medium', 'high']).optional().default('medium'),
+  },
+  async ({task, priority}) => {
+    const todo = createTodo(task, priority);
+    return {
+      content: [{
+        type: "text",
+        text: `Todo created: ${todo.task} (${todo.priority} priority)`,
+      }],
+    };
+  }
+);
+```
+
+### Add Tags
+
+```typescript
+// Add tags to Todo interface
+export interface Todo {
+  // ... existing fields ...
+  tags: string[];
+}
+
+// Add tag management functions
+export const addTagToTodo = (id: string, tag: string): Todo | undefined => {
+  const todo = todos.find(todo => todo.id === id);
+  if (todo && !todo.tags.includes(tag)) {
+    todo.tags.push(tag);
+  }
+  return todo;
+};
+
+export const getTodosByTag = (tag: string): Todo[] => {
+  return todos.filter(todo => todo.tags.includes(tag));
+};
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build permission errors">
+    The build script sets execute permissions. If you see permission errors:
+    ```bash
+    chmod 755 build/index.js
+    ```
+  </Accordion>
+
+  <Accordion title="Module resolution errors">
+    Ensure your imports use `.js` extensions:
+    ```typescript
+    import { createTodo } from "./todo/todo.service.js";
+    ```
+    
+    This is required for ES modules even with TypeScript.
+  </Accordion>
+
+  <Accordion title="State persistence">
+    This server uses in-memory storage. Todos are lost when the server restarts. For persistence, implement file-based or database storage in the service layer.
+  </Accordion>
+</AccordionGroup>
+
+## Project Structure
+
+```
+todo-ts/
+├── src/
+│   ├── index.ts              # Main server and tool definitions
+│   └── todo/
+│       └── todo.service.ts   # Business logic and state management
+├── build/                    # Compiled JavaScript output
+├── package.json             # Dependencies and scripts
+├── tsconfig.json            # TypeScript configuration
+└── README.md                # Documentation
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="EDteam Go Server" icon="graduation-cap" href="/servers/edteam-go">
+    Learn about external API integration with Go
+  </Card>
+  <Card title="Basic TypeScript" icon="code" href="/servers/basic-typescript">
+    Explore resources and prompts in MCP
+  </Card>
+</CardGroup>

@@ -1,0 +1,502 @@
+---
+title: 'Ollama TypeScript Client'
+description: 'Integrate Ollama LLMs with MCP tools using TypeScript for function calling'
+---
+
+## Overview
+
+The Ollama TypeScript client demonstrates how to integrate local language models with MCP tools, enabling LLMs to execute server-side functions. This creates a powerful agentic system where the model can autonomously call tools to accomplish tasks.
+
+## Source Code
+
+The implementation can be found at `~/workspace/source/clients/ollama-ts/`.
+
+## Prerequisites
+
+- Node.js (v16 or higher)
+- [Ollama](https://ollama.ai/) installed and running
+- A compatible LLM model (e.g., `mistral:latest`, `llama3:latest`)
+- An MCP server
+
+## Installation
+
+```bash
+npm install @modelcontextprotocol/sdk node-fetch
+npm install --save-dev @types/node typescript
+```
+
+### Package Configuration
+
+```json
+{
+  "name": "ollama-ts-app",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/ollamaApp.js",
+    "dev": "ts-node-esm ollamaApp.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.13",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+## Architecture
+
+The implementation consists of three main components:
+
+1. **MCPClient**: Manages connection to MCP servers and tool execution
+2. **OllamaAPIClient**: Handles communication with the Ollama API
+3. **OllamaAgent**: Orchestrates the interaction between Ollama and MCP tools
+
+## MCP Client Implementation
+
+### Class Structure
+
+```typescript
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+export class MCPClient {
+  private serverParams: {
+    command: string;
+    args: string[];
+    env?: Record<string, string>;
+  };
+  private client: Client | null = null;
+  private transport: StdioClientTransport | null = null;
+
+  constructor(
+    command: string,
+    args: string[],
+    env?: Record<string, string>
+  ) {
+    this.serverParams = { command, args, env };
+  }
+}
+```
+
+### Connecting to MCP Server
+
+```typescript
+async connect(): Promise<boolean> {
+  try {
+    this.transport = new StdioClientTransport(this.serverParams);
+    
+    this.client = new Client(
+      {
+        name: "mcp-typescript-client",
+        version: "1.0.0"
+      },
+      {
+        capabilities: {
+          prompts: {},
+          resources: {},
+          tools: {}
+        }
+      }
+    );
+
+    await this.client.connect(this.transport);
+    console.log("Conexión exitosa con servidor MCP");
+    return true;
+  } catch (e) {
+    console.error(`Error de conexión: ${e}`);
+    await this.disconnect();
+    return false;
+  }
+}
+```
+
+### Listing and Executing Tools
+
+```typescript
+async listTools(): Promise<any> {
+  if (!this.client) {
+    throw new Error("Cliente no conectado. Llama a connect() primero");
+  }
+
+  const tools = await this.client.listTools();
+  return tools;
+}
+
+async executeTool(toolName: string, args: Record<string, any>): Promise<any> {
+  if (!this.client) {
+    throw new Error("Cliente no conectado. Llama a connect() primero");
+  }
+
+  const result = await this.client.callTool({
+    name: toolName,
+    arguments: args
+  });
+  
+  return result;
+}
+```
+
+## Ollama API Client
+
+### Creating the Client
+
+```typescript
+import fetch from 'node-fetch';
+
+class OllamaAPIClient {
+  private baseUrl: string;
+
+  constructor(baseUrl: string = "http://localhost:11434") {
+    this.baseUrl = baseUrl;
+  }
+
+  async checkConnection(): Promise<boolean> {
+    const response = await fetch(`${this.baseUrl}/api/tags`);
+    if (response.status !== 200) {
+      throw new Error(`Error al conectarse: ${response.status}`);
+    }
+    return true;
+  }
+}
+```
+
+### Chat with Function Calling
+
+```typescript
+async chat(
+  model: string,
+  messages: MessageType[],
+  tools?: ToolDefinition[],
+  options?: OllamaApiOptions
+): Promise<string | { type: string; function_call: any }> {
+  const data: any = {
+    model: model,
+    messages: messages,
+    stream: false
+  };
+
+  if (tools) {
+    data.tools = tools;
+  }
+
+  const response = await fetch(
+    `${this.baseUrl}/api/chat`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    }
+  );
+
+  const responseText = await response.text();
+  return this._processResponse(responseText);
+}
+```
+
+### Processing Responses
+
+```typescript
+private _processResponse(
+  responseText: string
+): string | { type: string; function_call: any } {
+  const lines = responseText.trim().split('\n');
+  let fullResponse = "";
+
+  for (const line of lines) {
+    const respJson = JSON.parse(line);
+
+    // Check for function call
+    if (respJson.message?.tool_calls) {
+      const functionCall = respJson.message.tool_calls[0];
+      if (functionCall) {
+        return {
+          type: "function_call",
+          function_call: functionCall
+        };
+      }
+    }
+
+    // Accumulate normal response
+    if (respJson.message?.content) {
+      fullResponse += respJson.message.content;
+    }
+  }
+
+  return fullResponse;
+}
+```
+
+## Tool Manager
+
+The ToolManager converts MCP tools to Ollama's function calling format:
+
+```typescript
+class ToolManager {
+  getAllTools(mcpTools: any = null): ToolDefinition[] {
+    const tools: ToolDefinition[] = [];
+
+    if (mcpTools?.tools) {
+      for (const mcpTool of mcpTools.tools) {
+        tools.push({
+          type: 'function',
+          function: {
+            name: `mcp_${mcpTool.name}`,
+            description: mcpTool.description || `MCP tool: ${mcpTool.name}`,
+            parameters: mcpTool.inputSchema || { type: 'object' }
+          }
+        });
+      }
+    }
+
+    return tools;
+  }
+}
+```
+
+## Ollama Agent
+
+### Initialization
+
+```typescript
+class OllamaAgent {
+  private ollamaClient: OllamaAPIClient;
+  private mcpClient: MCPClient;
+  private toolManager: ToolManager;
+  private toolsMCP: any = null;
+
+  constructor(
+    ollamaUrl: string = "http://localhost:11434",
+    mcpCommand: string = "node",
+    mcpArgs: string[] = ["/path/to/server.js"]
+  ) {
+    this.ollamaClient = new OllamaAPIClient(ollamaUrl);
+    this.mcpClient = new MCPClient(mcpCommand, mcpArgs);
+    this.toolManager = new ToolManager();
+  }
+
+  async setup(): Promise<void> {
+    await this.ollamaClient.checkConnection();
+    const connected = await this.mcpClient.connect();
+    if (connected) {
+      this.toolsMCP = await this.mcpClient.listTools();
+    }
+  }
+}
+```
+
+### Executing MCP Tools
+
+```typescript
+async executeMcpTool(toolName: string, args: Record<string, any>): Promise<any> {
+  if (!this.mcpClient || !this.toolsMCP) {
+    throw new Error("MCP Client not connected");
+  }
+  return await this.mcpClient.executeTool(toolName, args);
+}
+```
+
+## Function Execution Flow
+
+### Execute Function Handler
+
+```typescript
+async function executeFunction(
+  functionName: string,
+  functionArgs: Record<string, any>,
+  agent: OllamaAgent
+): Promise<string> {
+  if (functionName.startsWith("mcp_")) {
+    const actualToolName = functionName.substring(4);
+    try {
+      const result = await agent.executeMcpTool(actualToolName, functionArgs);
+      return JSON.stringify(result);
+    } catch (error) {
+      return `Error ejecutando la herramienta MCP ${actualToolName}: ${error}`;
+    }
+  }
+  return `Función ${functionName} no implementada`;
+}
+```
+
+### Processing Function Calls
+
+```typescript
+async function processFunctionCall(
+  modelName: string,
+  response: { function_call: any },
+  messages: MessageType[],
+  agent: OllamaAgent
+): Promise<void> {
+  const functionCall = response.function_call;
+  const functionName = functionCall.function.name;
+  const functionArgs = typeof functionCall.function.arguments === 'object'
+    ? functionCall.function.arguments
+    : JSON.parse(functionCall.function.arguments);
+
+  // Execute the function
+  const functionResult = await executeFunction(functionName, functionArgs, agent);
+
+  // Add function call to message history
+  messages.push({
+    role: MessageRole.ASSISTANT,
+    content: null,
+    tool_calls: [{
+      id: "call_" + messages.length,
+      function: {
+        name: functionName,
+        arguments: functionCall.function.arguments
+      }
+    }]
+  });
+
+  // Add function result
+  messages.push({
+    role: MessageRole.TOOL,
+    tool_call_id: "call_" + (messages.length - 1),
+    name: functionName,
+    content: functionResult
+  });
+
+  // Get final response from model
+  const finalResponse = await agent.chat(modelName, messages);
+  
+  if (typeof finalResponse === 'object' && finalResponse.type === "function_call") {
+    await processFunctionCall(modelName, finalResponse, messages, agent);
+  } else if (typeof finalResponse === 'string') {
+    console.log(`\n${modelName}: ${finalResponse}`);
+    messages.push({ role: MessageRole.ASSISTANT, content: finalResponse });
+  }
+}
+```
+
+## Interactive Chat
+
+```typescript
+async function interactiveChat(agent: OllamaAgent): Promise<void> {
+  const modelName = "mistral:latest";
+  const messages: MessageType[] = [];
+  
+  messages.push({
+    role: MessageRole.SYSTEM,
+    content: "Eres un agente que consultará las tools que están disponibles",
+  });
+
+  console.log("\nIniciando chat (escribe '/salir' para terminar)");
+  
+  const readline = (await import('readline')).createInterface({
+    input: process.stdin,
+    output: process.stdout
+  });
+
+  while (true) {
+    const userMessage = await new Promise<string>((resolve) => {
+      readline.question("\nTú: ", resolve);
+    });
+
+    if (['/salir', '/exit', '/quit'].includes(userMessage.toLowerCase())) {
+      break;
+    }
+
+    messages.push({ role: MessageRole.USER, content: userMessage });
+    const response = await agent.chat(modelName, messages);
+
+    if (typeof response === 'object' && response.type === "function_call") {
+      await processFunctionCall(modelName, response, messages, agent);
+    } else if (typeof response === 'string') {
+      console.log(`\n${modelName}: ${response}`);
+      messages.push({ role: MessageRole.ASSISTANT, content: response });
+    }
+  }
+  
+  readline.close();
+}
+```
+
+## Running the Application
+
+### Main Entry Point
+
+```typescript
+async function main(): Promise<void> {
+  const agent = new OllamaAgent();
+
+  try {
+    await agent.setup();
+    await interactiveChat(agent);
+  } finally {
+    await agent.cleanup();
+  }
+}
+
+main().catch(error => {
+  console.error("Error fatal:", error);
+  process.exit(1);
+});
+```
+
+### Build and Start
+
+```bash
+# Build the project
+npm run build
+
+# Start the application
+npm start
+```
+
+## Environment Variables
+
+```bash
+export MCP_SERVER_PATH="/path/to/your/server.js"
+```
+
+## Message Roles
+
+```typescript
+enum MessageRole {
+  SYSTEM = "system",
+  USER = "user",
+  ASSISTANT = "assistant",
+  TOOL = "tool"
+}
+```
+
+## Best Practices
+
+1. **Error Handling**: Always wrap MCP tool calls in try-catch blocks
+2. **Logging**: Use structured logging for debugging function calls
+3. **Model Selection**: Use models that support function calling (Mistral, Llama 3 70B)
+4. **Tool Naming**: Prefix MCP tools with `mcp_` to avoid conflicts
+5. **Resource Cleanup**: Always call `cleanup()` in the finally block
+
+## Troubleshooting
+
+### Ollama not responding
+```bash
+# Check if Ollama is running
+ollama list
+
+# Start Ollama server
+ollama serve
+```
+
+### MCP connection errors
+- Verify the server path is correct
+- Check that the MCP server is compiled
+- Ensure Node.js can execute the server
+
+### Function calling not working
+- Verify your model supports function calling
+- Check tool definitions are properly formatted
+- Review message history for proper structure
+
+## Next Steps
+
+- Explore [Python + Ollama integration](/clients/ollama-python)
+- Learn about [basic TypeScript client](/clients/basic-typescript)
+- Build custom MCP tools for your use case

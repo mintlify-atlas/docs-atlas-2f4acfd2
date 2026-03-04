@@ -1,0 +1,497 @@
+---
+title: Basic TypeScript Server
+description: A comprehensive MCP server with tools, resources, and prompts for Game of Thrones quotes and utilities
+---
+
+The Basic TypeScript server demonstrates core MCP capabilities including tools, resources, and prompts. It features Game of Thrones quote fetching, mathematical operations, and code review functionality.
+
+## Features
+
+- **Tools**: Random quotes, LCM calculator
+- **Resources**: Dynamic quote retrieval and person data
+- **Prompts**: Quote analysis and code review templates
+- **API Integration**: Game of Thrones Quotes API
+
+## Installation
+
+<Steps>
+  <Step title="Clone and Navigate">
+    Navigate to the basic server directory:
+    ```bash
+    cd servers/basic
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install required packages:
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Build the Server">
+    Compile TypeScript to JavaScript:
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Configure MCP Client">
+    Add to your MCP client configuration:
+    ```json
+    {
+      "mcpServers": {
+        "basic-ts": {
+          "command": "node",
+          "args": ["/path/to/servers/basic/dist/server.js"]
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+## Tools
+
+### get_random_quotes
+
+Fetch random quotes from Game of Thrones characters.
+
+**Parameters:**
+- `count` (number, optional): Number of quotes to fetch (1-10, default: 5)
+
+**Example Usage:**
+```typescript
+// Request 3 random quotes
+{
+  "count": 3
+}
+```
+
+**Response:**
+```
+Quote: "Winter is coming."
+Character: Ned Stark
+House: House Stark
+---
+Quote: "A Lannister always pays his debts."
+Character: Tyrion Lannister
+House: House Lannister
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "get_random_quotes",
+  { count: z.number().optional().default(5) },
+  async ({ count }) => {
+    // Validate count
+    if (count <= 0 || count > 10) {
+      return {
+        content: [{ type: "text", text: "Count must be between 1 and 10" }],
+        isError: true
+      };
+    }
+
+    // Fetch quotes from API
+    const quotes = await fetchRandomQuotes(count);
+    const formattedQuotes = quotes.map(formatQuote);
+
+    return {
+      content: [{ type: "text", text: formattedQuotes.join("\n---\n") }]
+    };
+  }
+);
+```
+
+### lcm
+
+Calculate the least common multiple of a list of numbers.
+
+**Parameters:**
+- `numbers` (array of numbers): At least 2 numbers required
+
+**Example Usage:**
+```typescript
+// Calculate LCM of 12, 18, and 24
+{
+  "numbers": [12, 18, 24]
+}
+```
+
+**Response:**
+```
+The least common multiple is: 72
+```
+
+**Implementation:**
+```typescript
+server.tool(
+  "lcm",
+  "Calculate the least common multiple of a list of numbers",
+  { 
+    numbers: z.array(z.number())
+      .min(2)
+      .describe("A list of numbers to calculate the least common multiple of")
+  },
+  async ({ numbers }) => {
+    let result = Math.floor(numbers[0]);
+    for (let i = 1; i < numbers.length; i++) {
+      const num = Math.floor(numbers[i]);
+      result = lcm(result, num);
+    }
+
+    return {
+      content: [{ type: "text", text: `The least common multiple is: ${result}` }]
+    };
+  }
+);
+
+// Helper functions
+function gcd(a: number, b: number): number {
+  while (b !== 0) {
+    const temp = b;
+    b = a % b;
+    a = temp;
+  }
+  return a;
+}
+
+function lcm(a: number, b: number): number {
+  return Math.abs(a * b) / gcd(a, b);
+}
+```
+
+## Resources
+
+### Random Quotes Resource
+
+Access random Game of Thrones quotes via URI.
+
+**URI:** `got://quotes/random`
+
+**Implementation:**
+```typescript
+server.resource(
+  "random-quotes",
+  "got://quotes/random",
+  async (uri) => {
+    const quotes = await fetchRandomQuotes(5);
+    const formattedQuotes = quotes.map(formatQuote);
+
+    return {
+      contents: [{
+        uri: uri.href,
+        text: formattedQuotes.join("\n---\n"),
+        mimeType: "text/plain"
+      }]
+    };
+  }
+);
+```
+
+### Person Properties Resource
+
+Dynamic resource template for accessing person data.
+
+**URI Template:** `person://properties/{name}`
+
+**Available Names:**
+- `alexys`
+- `mariana`
+
+**Example URI:** `person://properties/alexys`
+
+**Response:**
+```json
+{
+  "name": "alexys",
+  "age": 23,
+  "height": 1.7
+}
+```
+
+**Implementation:**
+```typescript
+const personData: Record<string, PersonData> = {
+  alexys: { name: "alexys", age: 23, height: 1.7 },
+  mariana: { name: "mariana", age: 23, height: 1.7 }
+};
+
+server.resource(
+  "person-properties",
+  new ResourceTemplate("person://properties/{name}", { list: undefined }),
+  async (uri, { name }) => {
+    if (!name || Array.isArray(name)) {
+      throw new Error("name must be a single string");
+    }
+
+    const person = personData[name];
+    if (!person) {
+      throw new Error(`Person with name ${name} not found`);
+    }
+
+    return {
+      contents: [{
+        uri: uri.href,
+        text: JSON.stringify(person),
+        mimeType: "application/json"
+      }]
+    };
+  }
+);
+```
+
+## Prompts
+
+### Game of Thrones Quotes Analysis
+
+Generate a prompt for analyzing GoT quotes with optional theme focus.
+
+**Name:** `got_quotes_analysis`
+
+**Parameters:**
+- `theme` (string, optional): Focus theme for analysis
+
+**Example:**
+```typescript
+{
+  "theme": "power and ambition"
+}
+```
+
+**Implementation:**
+```typescript
+server.prompt(
+  "got_quotes_analysis",
+  { theme: z.string().optional() },
+  async ({ theme }) => {
+    const quotes = await fetchRandomQuotes(5);
+    const formattedQuotes = quotes.map(formatQuote);
+    const quotesText = formattedQuotes.join("\n---\n");
+
+    const themeInstruction = theme
+      ? ` Focus your analysis on the theme of '${theme}'.`
+      : "";
+
+    const systemContent = 
+      `You are an expert on Game of Thrones. Analyze these quotes ` +
+      `and provide insights about the characters and their motivations.` +
+      `${themeInstruction}`;
+
+    return {
+      description: "Game of Thrones Quotes Analysis",
+      messages: [
+        {
+          role: "assistant",
+          content: { type: "text", text: systemContent }
+        },
+        {
+          role: "user",
+          content: { 
+            type: "text", 
+            text: `Here are some Game of Thrones quotes to analyze:\n\n${quotesText}` 
+          }
+        }
+      ]
+    };
+  }
+);
+```
+
+### Code Review Prompt
+
+Structured code review template with best practices focus.
+
+**Name:** `code_review`
+
+**Parameters:**
+- `code` (string, required): Code to review
+
+**Implementation:**
+```typescript
+server.prompt(
+  "code_review",
+  { code: z.string() },
+  async ({ code }) => {
+    if (!code) {
+      throw new Error("No code provided for review");
+    }
+
+    return {
+      description: "Code Review",
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: "You are an expert software engineer. Review with focus on:" +
+              "\n- Code quality and best practices" +
+              "\n- Performance considerations" +
+              "\n- Security implications" +
+              "\n- Maintainability and readability" +
+              "\n- Potential bugs or edge cases"
+          }
+        },
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Please review the following code:\n\n${code}`
+          }
+        }
+      ]
+    };
+  }
+);
+```
+
+## API Integration
+
+The server integrates with the Game of Thrones Quotes API:
+
+**Base URL:** `https://api.gameofthronesquotes.xyz/v1`
+
+**Fetch Random Quotes:**
+```typescript
+const GOT_API_BASE = "https://api.gameofthronesquotes.xyz/v1";
+
+interface Quote {
+  sentence: string;
+  character: Character;
+}
+
+interface Character {
+  name: string;
+  slug: string;
+  house: House;
+}
+
+interface House {
+  name: string;
+  slug: string;
+}
+
+async function fetchRandomQuotes(count: number): Promise<Quote[]> {
+  if (count <= 0 || count > 10) {
+    throw new Error("count must be between 1 and 10");
+  }
+
+  const url = `${GOT_API_BASE}/random/${count}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Error fetching quotes: ${response.statusText}`);
+  }
+
+  return await response.json() as Quote[];
+}
+
+function formatQuote(quote: Quote): string {
+  return `
+Quote: "${quote.sentence}"
+Character: ${quote.character.name}
+House: ${quote.character.house.name}`;
+}
+```
+
+## Server Configuration
+
+**Server Initialization:**
+```typescript
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+
+const server = new McpServer({
+  name: "Game of Thrones Quotes",
+  version: "1.0.0",
+  capabilities: {
+    resources: { listChanged: true },
+    tools: {},
+    prompts: {}
+  }
+});
+
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(error => {
+  console.error(`Server error: ${error.message}`);
+  process.exit(1);
+});
+```
+
+## Dependencies
+
+```json
+{
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.7.0",
+    "@types/node": "^22.13.13",
+    "node-fetch": "^3.3.2",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Build errors">
+    Ensure you have Node.js 16+ installed:
+    ```bash
+    node --version
+    ```
+    
+    Clear build artifacts and rebuild:
+    ```bash
+    rm -rf dist node_modules
+    npm install
+    npm run build
+    ```
+  </Accordion>
+
+  <Accordion title="API connection issues">
+    The server requires internet access to fetch quotes from the Game of Thrones API. Check your network connection and firewall settings.
+  </Accordion>
+
+  <Accordion title="TypeScript compilation errors">
+    Verify your TypeScript configuration in `tsconfig.json`:
+    ```json
+    {
+      "compilerOptions": {
+        "target": "ES2020",
+        "module": "ES2020",
+        "moduleResolution": "node",
+        "outDir": "./dist"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Project Structure
+
+```
+basic/
+├── src/
+│   └── server.ts          # Main server implementation
+├── dist/                  # Compiled JavaScript output
+├── package.json          # Dependencies and scripts
+├── tsconfig.json         # TypeScript configuration
+└── README.md             # Project documentation
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Todo Server" icon="list-check" href="/servers/todo-typescript">
+    Learn about building CRUD operations with the Todo TypeScript server
+  </Card>
+  <Card title="Calculator Server" icon="calculator" href="/servers/calculator-python">
+    Explore Python MCP servers with FastMCP
+  </Card>
+</CardGroup>

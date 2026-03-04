@@ -1,0 +1,305 @@
+---
+title: 'Basic Python Client'
+description: 'Build an MCP client in Python to interact with MCP servers'
+---
+
+## Overview
+
+The basic Python client demonstrates how to connect to an MCP server and interact with its capabilities using the official `mcp` Python SDK. This client can list and execute tools, access resources, and use prompts.
+
+## Source Code
+
+The implementation can be found at `~/workspace/source/clients/basic-py/`.
+
+## Installation
+
+### Using uv (Recommended)
+
+```bash
+# Install uv if you don't have it
+pip install uv
+
+# Create project and install dependencies
+uv init
+uv add "mcp[cli]>=1.5.0"
+```
+
+### Using pip
+
+```bash
+pip install "mcp[cli]>=1.5.0"
+```
+
+### Project Configuration
+
+Your `pyproject.toml` should include:
+
+```toml
+[project]
+name = "basic-client"
+version = "0.1.0"
+description = "A basic client for a MCP server."
+requires-python = ">= 3.11"
+dependencies = [
+    "mcp[cli]>=1.5.0",
+]
+```
+
+## Client Implementation
+
+### 1. Imports
+
+```python
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+```
+
+### 2. Server Configuration
+
+Set up the connection parameters for the MCP server:
+
+```python
+server_params = StdioServerParameters(
+    command="node",
+    args=["/path/to/your/server.js"],
+    env=None,
+)
+```
+
+### 3. Main Client Function
+
+Create an async function to interact with the server:
+
+```python
+async def run():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            
+            # Your client logic here
+```
+
+## Working with MCP Capabilities
+
+### Listing and Using Prompts
+
+```python
+# List all available prompts
+prompts = await session.list_prompts()
+print("Prompts:")
+print(prompts)
+
+# Execute a specific prompt
+prompt = await session.get_prompt(
+    prompts.prompts[1].name,
+    arguments={
+        "code": "console.log('Hello, world!');"
+    }
+)
+print("Prompt:")
+print(prompt)
+```
+
+### Working with Resources
+
+```python
+# List static resources
+resources = await session.list_resources()
+print("Resources:")
+print(resources)
+
+# List dynamic resource templates
+template_resources = await session.list_resource_templates()
+print("Template Resources:")
+print(template_resources)
+
+# Read a static resource
+resource = await session.read_resource("got://quotes/random")
+print("Resource:")
+print(resource)
+
+# Read a dynamic resource with parameters
+resource = await session.read_resource("person://properties/alexys")
+print("Resource:")
+print(resource)
+```
+
+### Listing and Executing Tools
+
+```python
+# List all available tools
+tools = await session.list_tools()
+print("Tools:")
+print(tools)
+
+# Execute a tool with arguments
+tool_result = await session.call_tool(
+    tools.tools[1].name,
+    arguments={
+        "numbers": [1, 2, 3, 4, 5]
+    },
+)
+print("Tool Result:")
+print(tool_result)
+```
+
+## Complete Example
+
+Here's the complete implementation from `~/workspace/source/clients/basic-py/main.py`:
+
+```python
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+# Server connection parameters
+server_params = StdioServerParameters(
+    command="node",
+    args=[
+        "/path/to/server.js"
+    ],
+    env=None,
+)
+
+async def run():
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+
+            # List available prompts
+            prompts = await session.list_prompts()
+            print("Prompts:")
+            print(prompts)
+
+            # Execute a prompt
+            prompt = await session.get_prompt(
+                prompts.prompts[1].name,
+                arguments={
+                    "code": "console.log('Hello, world!');"
+                }
+            )
+            print("Prompt:")
+            print(prompt)
+
+            # List resources
+            resources = await session.list_resources()
+            print("Resources:")
+            print(resources)
+            
+            # List resource templates
+            template_resources = await session.list_resource_templates()
+            print("Template Resources:")
+            print(template_resources)
+
+            # Read a resource
+            resource = await session.read_resource("got://quotes/random")
+            print("Resource:")
+            print(resource)
+
+            # Read a template resource
+            resource = await session.read_resource("person://properties/alexys")
+            print("Resource:")
+            print(resource)
+
+            # List tools
+            tools = await session.list_tools()
+            print("Tools:")
+            print(tools)
+
+            # Execute a tool
+            tool_result = await session.call_tool(
+                tools.tools[1].name,
+                arguments={
+                    "numbers": [1, 2, 3, 4, 5]
+                },
+            )
+            print("Tool Result:")
+            print(tool_result)
+    
+if __name__ == "__main__":
+    import asyncio
+    asyncio.run(run())
+```
+
+## Client API Methods
+
+The `ClientSession` provides these key methods:
+
+| Method | Description | Returns |
+|--------|-------------|----------|
+| `initialize()` | Initializes the session | Coroutine |
+| `list_prompts()` | Lists all available prompts | PromptsListResult |
+| `get_prompt(name, arguments)` | Gets a prompt with arguments | PromptResult |
+| `list_resources()` | Lists all static resources | ResourcesListResult |
+| `list_resource_templates()` | Lists dynamic resource templates | ResourceTemplatesListResult |
+| `read_resource(uri)` | Reads a specific resource | ResourceResult |
+| `list_tools()` | Lists all available tools | ToolsListResult |
+| `call_tool(name, arguments)` | Executes a tool | ToolResult |
+
+## Context Managers
+
+The Python client uses async context managers for proper resource management:
+
+```python
+# stdio_client manages the stdio connection
+async with stdio_client(server_params) as (read, write):
+    # ClientSession manages the MCP session
+    async with ClientSession(read, write) as session:
+        await session.initialize()
+        # Use the session
+```
+
+This ensures that connections are properly closed even if errors occur.
+
+## Running the Client
+
+### With asyncio:
+
+```bash
+python main.py
+```
+
+### As a module:
+
+```python
+import asyncio
+from main import run
+
+asyncio.run(run())
+```
+
+## Error Handling
+
+Handle connection and execution errors:
+
+```python
+try:
+    async with stdio_client(server_params) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            # ... use the session
+except Exception as e:
+    print(f"Error: {e}")
+```
+
+## Type Hints
+
+The MCP Python SDK includes full type hints for better IDE support:
+
+```python
+from typing import Dict, Any
+from mcp import ClientSession
+
+async def call_tool_safely(
+    session: ClientSession, 
+    tool_name: str, 
+    args: Dict[str, Any]
+) -> Any:
+    result = await session.call_tool(tool_name, arguments=args)
+    return result
+```
+
+## Next Steps
+
+- Explore [Python with Ollama integration](/clients/ollama-python)
+- Learn about [TypeScript client implementation](/clients/basic-typescript)
+- Build advanced MCP applications with LLMs

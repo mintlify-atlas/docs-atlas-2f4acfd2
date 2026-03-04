@@ -1,0 +1,476 @@
+---
+title: Game of Thrones Quotes Server
+description: Learn how to build an MCP server that integrates with external APIs, resources, and prompts
+---
+
+# Game of Thrones Quotes Server
+
+This example demonstrates how to build a complete MCP server that integrates with an external API, implements multiple tools, resources, and prompts.
+
+## Overview
+
+The Game of Thrones Quotes server showcases:
+- **External API Integration**: Fetching data from a third-party API
+- **Multiple Tools**: Different operations with validation
+- **Resources**: Exposing data through MCP resources
+- **Resource Templates**: Dynamic resource URIs with parameters
+- **Prompts**: Pre-configured AI interactions
+
+## Server Implementation
+
+### Basic Setup
+
+```typescript server.ts
+import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
+import fetch from "node-fetch";
+
+const GOT_API_BASE = "https://api.gameofthronesquotes.xyz/v1";
+
+// Create MCP server
+const server = new McpServer({
+  name: "Game of Thrones Quotes",
+  version: "1.0.0",
+  capabilities: {
+    resources: { listChanged: true },
+    tools: {},
+    prompts: {}
+  }
+});
+```
+
+### Type Definitions
+
+Define TypeScript interfaces for the API responses:
+
+```typescript
+interface Quote {
+  sentence: string;
+  character: Character;
+}
+
+interface Character {
+  name: string;
+  slug: string;
+  house: House;
+}
+
+interface House {
+  name: string;
+  slug: string;
+}
+```
+
+## External API Integration
+
+### Fetching Quotes
+
+```typescript
+async function fetchRandomQuotes(count: number): Promise<Quote[]> {
+  if (count <= 0) {
+    throw new Error("count must be a positive number");
+  }
+  if (count > 10) {
+    throw new Error("maximum number of quotes is 10");
+  }
+
+  const url = `${GOT_API_BASE}/random/${count}`;
+  const response = await fetch(url);
+
+  if (!response.ok) {
+    throw new Error(`Error fetching quotes: ${response.statusText}`);
+  }
+
+  return await response.json() as Quote[];
+}
+```
+
+### Formatting Output
+
+```typescript
+function formatQuote(quote: Quote): string {
+  return `
+Quote: "${quote.sentence}"
+Character: ${quote.character.name}
+House: ${quote.character.house.name}`;
+}
+```
+
+## Implementing Tools
+
+### Get Random Quotes Tool
+
+This tool fetches a specified number of random quotes:
+
+```typescript
+server.tool(
+  "get_random_quotes",
+  { count: z.number().optional().default(5) },
+  async ({ count }) => {
+    try {
+      // Validate count
+      if (count <= 0) {
+        return {
+          content: [{ type: "text", text: "Count must be a positive number." }],
+          isError: true
+        };
+      }
+      if (count > 10) {
+        return {
+          content: [{ type: "text", text: "Maximum number of quotes is 10." }],
+          isError: true
+        };
+      }
+
+      // Fetch quotes from API
+      const quotes = await fetchRandomQuotes(count);
+
+      // Format quotes
+      const formattedQuotes = quotes.map(formatQuote);
+
+      return {
+        content: [{ type: "text", text: formattedQuotes.join("\n---\n") }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+        isError: true
+      };
+    }
+  }
+);
+```
+
+### LCM Tool (Math Operations)
+
+A mathematical tool to calculate the least common multiple:
+
+```typescript
+server.tool(
+  "lcm",
+  "Calculate the least common multiple of a list of numbers",
+  { 
+    numbers: z.array(z.number())
+      .min(2)
+      .describe("A list of numbers to calculate the least common multiple of. The list must contain at least two numbers.") 
+  },
+  async ({ numbers }) => {
+    try {
+      // Calculate LCM
+      let result = Math.floor(numbers[0]);
+      for (let i = 1; i < numbers.length; i++) {
+        const num = Math.floor(numbers[i]);
+        result = lcm(result, num);
+      }
+
+      return {
+        content: [{ type: "text", text: `The least common multiple is: ${result}` }]
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+        isError: true
+      };
+    }
+  }
+);
+
+// Helper functions
+function gcd(a: number, b: number): number {
+  while (b !== 0) {
+    const temp = b;
+    b = a % b;
+    a = temp;
+  }
+  return a;
+}
+
+function lcm(a: number, b: number): number {
+  return Math.abs(a * b) / gcd(a, b);
+}
+```
+
+## Resources
+
+### Static Resource
+
+Resources expose data that can be read by MCP clients:
+
+```typescript
+server.resource(
+  "random-quotes",
+  "got://quotes/random",
+  async (uri) => {
+    try {
+      // Fetch 5 random quotes
+      const quotes = await fetchRandomQuotes(5);
+
+      // Format quotes
+      const formattedQuotes = quotes.map(formatQuote);
+
+      return {
+        contents: [{
+          uri: uri.href,
+          text: formattedQuotes.join("\n---\n"),
+          mimeType: "text/plain"
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Error fetching quotes: ${(error as Error).message}`);
+    }
+  }
+);
+```
+
+### Resource Templates (Dynamic Resources)
+
+Resource templates allow parameterized URIs:
+
+```typescript
+type PersonData = {
+  name: string;
+  age: number;
+  height: number;
+}
+
+const personData: Record<string, PersonData> = {
+  alexys: {
+    name: "alexys",
+    age: 23,
+    height: 1.7
+  },
+  mariana: {
+    name: "mariana",
+    age: 23,
+    height: 1.7
+  }
+};
+
+server.resource(
+  "person-properties",
+  new ResourceTemplate("person://properties/{name}", { list: undefined }),
+  async (uri, { name }) => {
+    try {
+      if (!name || Array.isArray(name)) {
+        throw new Error("name must be a single string");
+      }
+
+      const person = personData[name];
+      if (!person) {
+        throw new Error(`Person with name ${name} not found`);
+      }
+
+      return {
+        contents: [{
+          uri: uri.href,
+          text: JSON.stringify(person),
+          mimeType: "application/json"
+        }]
+      };
+    } catch (error) {
+      throw new Error(`Error fetching person data: ${(error as Error).message}`);
+    }
+  }
+);
+```
+
+## Prompts
+
+### Quotes Analysis Prompt
+
+Prompts provide pre-configured conversation starters:
+
+```typescript
+server.prompt(
+  "got_quotes_analysis",
+  { theme: z.string().optional() },
+  async ({ theme }) => {
+    try {
+      // Fetch 5 random quotes
+      const quotes = await fetchRandomQuotes(5);
+
+      // Format quotes
+      const formattedQuotes = quotes.map(formatQuote);
+      const quotesText = formattedQuotes.join("\n---\n");
+
+      // Create theme instruction if provided
+      const themeInstruction = theme
+        ? ` Focus your analysis on the theme of '${theme}'.`
+        : "";
+
+      const systemContent = 
+        `You are an expert on Game of Thrones. Analyze these quotes and provide insights about the characters and their motivations.${themeInstruction}`;
+
+      return {
+        description: "Game of Thrones Quotes Analysis",
+        messages: [
+          {
+            role: "assistant",
+            content: {
+              type: "text",
+              text: systemContent
+            }
+          },
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: `Here are some Game of Thrones quotes to analyze:\n\n${quotesText}`
+            }
+          }
+        ]
+      };
+    } catch (error) {
+      throw new Error(`Error generating quotes analysis prompt: ${(error as Error).message}`);
+    }
+  }
+);
+```
+
+### Code Review Prompt
+
+A generic code review prompt:
+
+```typescript
+server.prompt(
+  "code_review",
+  { code: z.string() },
+  async ({ code }) => {
+    if (!code) {
+      throw new Error("No code provided for review");
+    }
+
+    return {
+      description: "Code Review",
+      messages: [
+        {
+          role: "assistant",
+          content: {
+            type: "text",
+            text: "You are an expert software engineer with extensive experience in code review. You will help review code with a focus on:" +
+              "\n- Code quality and best practices" +
+              "\n- Performance considerations" +
+              "\n- Security implications" +
+              "\n- Maintainability and readability" +
+              "\n- Potential bugs or edge cases" +
+              "\nPlease share the code you would like me to review."
+          }
+        },
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text: `Please review the following code and provide detailed feedback:\n\n${code}`
+          }
+        }
+      ]
+    };
+  }
+);
+```
+
+## Starting the Server
+
+```typescript
+async function main() {
+  const transport = new StdioServerTransport();
+  await server.connect(transport);
+}
+
+main().catch(error => {
+  console.error(`Server error: ${error.message}`);
+  process.exit(1);
+});
+```
+
+## Installation & Setup
+
+### Dependencies
+
+```json package.json
+{
+  "name": "got-quotes-server",
+  "version": "1.0.0",
+  "type": "module",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "latest",
+    "node-fetch": "^3.3.2",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/server.js"
+  }
+}
+```
+
+### Building and Running
+
+```bash
+# Install dependencies
+npm install
+
+# Compile TypeScript
+npm run build
+
+# Run the server
+npm start
+```
+
+## Using with MCP Clients
+
+### Claude Desktop Configuration
+
+```json claude_desktop_config.json
+{
+  "mcpServers": {
+    "got-quotes": {
+      "command": "node",
+      "args": ["/path/to/dist/server.js"]
+    }
+  }
+}
+```
+
+### Programmatic Usage
+
+```typescript
+import { MCPClient } from './mcpClient.js';
+
+const client = new MCPClient("node", ["./dist/server.js"]);
+await client.connect();
+
+// List available tools
+const tools = await client.listTools();
+console.log(tools);
+
+// Execute a tool
+const result = await client.executeTool("get_random_quotes", { count: 3 });
+console.log(result);
+```
+
+## Key Patterns
+
+1. **Error Handling**: Always validate inputs and handle API errors gracefully
+2. **Type Safety**: Use TypeScript interfaces for API responses
+3. **Validation**: Use Zod schemas for runtime validation
+4. **Resource URIs**: Follow URI conventions (e.g., `got://quotes/random`)
+5. **Prompt Design**: Structure prompts with clear system and user messages
+
+## API Reference
+
+The server uses the [Game of Thrones Quotes API](https://gameofthronesquotes.xyz/):
+
+- `GET /v1/random/{count}` - Get random quotes (1-10)
+- Response includes character name, house, and quote text
+
+## Next Steps
+
+- Integrate with [Ollama](/integrations/ollama) for local LLM usage
+- Explore [Calculator Operations](/examples/calculator-operations) for Python examples
+- Learn about [State Management](/examples/todo-management) with the Todo server

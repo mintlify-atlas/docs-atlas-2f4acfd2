@@ -1,80 +1,494 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: "Quickstart Guide"
+description: "Build and run your first MCP server in under 5 minutes with step-by-step instructions"
 ---
 
-## Get started in three steps
+## Get Your First MCP Server Running
 
-Get your documentation site running locally and make your first customization.
-
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+This guide will walk you through setting up, building, and testing your first MCP server. We'll use the TypeScript Game of Thrones quotes server as our example, but you can follow similar steps for Python or Go.
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+By the end of this guide, you'll have a working MCP server that can fetch quotes, perform calculations, and respond to prompts.
 </Note>
+
+## Prerequisites
+
+Before you begin, make sure you have:
+
+<CardGroup cols={2}>
+  <Card title="Node.js" icon="node-js">
+    Version 18 or higher for TypeScript examples
+  </Card>
+  <Card title="Python" icon="python">
+    Version 3.10 or higher for Python examples
+  </Card>
+  <Card title="Git" icon="git">
+    To clone the course repository
+  </Card>
+  <Card title="Code Editor" icon="code">
+    VS Code, Cursor, or your preferred editor
+  </Card>
+</CardGroup>
+
+## Step-by-Step Tutorial
+
+<Steps>
+  <Step title="Clone the Repository">
+    First, clone the MCP Course repository to get access to all the example code:
+
+    ```bash
+    git clone https://github.com/alexyslozada/mcp-course.git
+    cd mcp-course
+    ```
+
+    The repository structure looks like this:
+
+    ```
+    mcp-course/
+    ├── servers/           # MCP server implementations
+    │   ├── basic/         # TypeScript: Game of Thrones quotes
+    │   ├── calculator-py/ # Python: Calculator operations
+    │   └── todo-ts/       # TypeScript: Todo management
+    └── clients/           # MCP client implementations
+        ├── basic-ts/      # TypeScript client
+        └── basic-py/      # Python client
+    ```
+
+    <Tip>
+    Each server directory contains a complete, working example you can learn from and modify.
+    </Tip>
+  </Step>
+
+  <Step title="Navigate to the Server Directory">
+    Let's start with the TypeScript server that includes multiple features:
+
+    ```bash
+    cd servers/basic
+    ```
+
+    Take a look at the `package.json` to see the dependencies:
+
+    ```json
+    {
+      "name": "basic",
+      "version": "1.0.0",
+      "type": "module",
+      "dependencies": {
+        "@modelcontextprotocol/sdk": "^1.7.0",
+        "@types/node": "^22.13.13",
+        "node-fetch": "^3.3.2",
+        "typescript": "^5.8.2"
+      },
+      "scripts": {
+        "build": "tsc",
+        "start": "node dist/server.js"
+      }
+    }
+    ```
+
+    The key dependency is `@modelcontextprotocol/sdk`, which provides all the MCP functionality.
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install the required packages:
+
+    ```bash
+    npm install
+    ```
+
+    This will install:
+    - The official MCP SDK for TypeScript
+    - Zod for schema validation
+    - Node-fetch for API calls
+    - TypeScript compiler
+
+    <Warning>
+    Make sure you're using Node.js 18 or higher. Check with `node --version`.
+    </Warning>
+  </Step>
+
+  <Step title="Build the Server">
+    Compile the TypeScript code to JavaScript:
+
+    ```bash
+    npm run build
+    ```
+
+    This creates a `dist/` directory with the compiled JavaScript files. You should see output like:
+
+    ```
+    > basic@1.0.0 build
+    > tsc
+    ```
+
+    If the build succeeds, you're ready to run the server!
+  </Step>
+
+  <Step title="Understand the Server Code">
+    Before running the server, let's look at what it does. Open `src/server.ts`:
+
+    <CodeGroup>
+    ```typescript Tool Definition
+    // Define a tool that fetches random quotes
+    server.tool(
+      "get_random_quotes",
+      { count: z.number().optional().default(5) },
+      async ({ count }) => {
+        try {
+          const quotes = await fetchRandomQuotes(count);
+          const formattedQuotes = quotes.map(formatQuote);
+          
+          return {
+            content: [{ 
+              type: "text", 
+              text: formattedQuotes.join("\n---\n") 
+            }]
+          };
+        } catch (error) {
+          return {
+            content: [{ 
+              type: "text", 
+              text: `Error: ${error.message}` 
+            }],
+            isError: true
+          };
+        }
+      }
+    );
+    ```
+
+    ```typescript Resource Definition
+    // Define a resource for random quotes
+    server.resource(
+      "random-quotes",
+      "got://quotes/random",
+      async (uri) => {
+        const quotes = await fetchRandomQuotes(5);
+        const formattedQuotes = quotes.map(formatQuote);
+        
+        return {
+          contents: [{
+            uri: uri.href,
+            text: formattedQuotes.join("\n---\n"),
+            mimeType: "text/plain"
+          }]
+        };
+      }
+    );
+    ```
+
+    ```typescript Prompt Definition
+    // Define a prompt for code review
+    server.prompt(
+      "code_review",
+      { code: z.string() },
+      async ({ code }) => {
+        return {
+          description: "Code Review",
+          messages: [
+            {
+              role: "assistant",
+              content: {
+                type: "text",
+                text: "You are an expert software engineer..."
+              }
+            },
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Please review the following code:\n\n${code}`
+              }
+            }
+          ]
+        };
+      }
+    );
+    ```
+    </CodeGroup>
+
+    This server exposes:
+    - **2 Tools**: `get_random_quotes` and `lcm` (least common multiple)
+    - **2 Resources**: Random quotes and person properties
+    - **2 Prompts**: Game of Thrones analysis and code review
+  </Step>
+
+  <Step title="Run the Server">
+    Start the MCP server:
+
+    ```bash
+    npm start
+    ```
+
+    The server is now running and waiting for connections via stdio (standard input/output).
+
+    <Note>
+    MCP servers typically communicate through stdio, which means they don't print anything to the console. They're waiting for a client to connect and send requests.
+    </Note>
+
+    To test the server, you'll need to connect a client. Keep this terminal open and open a new one for the next step.
+  </Step>
+
+  <Step title="Connect a Client">
+    In a new terminal, navigate to the TypeScript client:
+
+    ```bash
+    cd clients/basic-ts
+    npm install
+    ```
+
+    The client code shows how to connect to the server:
+
+    ```typescript Client Connection
+    import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+    import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+    // Create a transport that connects to the server
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: ["path/to/server.js"]
+    });
+
+    // Create and connect the client
+    const client = new Client(
+      {
+        name: "basic-client",
+        version: "1.0.0"
+      },
+      {
+        capabilities: {
+          prompts: {},
+          resources: {},
+          tools: {}
+        }
+      }
+    );
+
+    await client.connect(transport);
+    ```
+
+    <Warning>
+    You'll need to update the path in the client code to point to your compiled server. Change the path in `src/index.ts` to match your local setup.
+    </Warning>
+  </Step>
+
+  <Step title="Test the Server">
+    Run the client to test all server capabilities:
+
+    ```bash
+    npm start
+    ```
+
+    You should see output showing:
+
+    **Available Tools:**
+    ```json
+    {
+      "tools": [
+        {
+          "name": "get_random_quotes",
+          "description": "",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "count": {
+                "type": "number",
+                "default": 5
+              }
+            }
+          }
+        },
+        {
+          "name": "lcm",
+          "description": "Calculate the least common multiple of a list of numbers",
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "numbers": {
+                "type": "array",
+                "items": { "type": "number" },
+                "minItems": 2
+              }
+            }
+          }
+        }
+      ]
+    }
+    ```
+
+    **Tool Execution Result:**
+    ```json
+    {
+      "content": [
+        {
+          "type": "text",
+          "text": "The least common multiple is: 60"
+        }
+      ]
+    }
+    ```
+
+    **Resource Data:**
+    ```json
+    {
+      "contents": [
+        {
+          "uri": "got://quotes/random",
+          "mimeType": "text/plain",
+          "text": "Quote: \"Winter is coming\"\nCharacter: Ned Stark\nHouse: House Stark\n---\n..."
+        }
+      ]
+    }
+    ```
+
+    <Tip>
+    The client code demonstrates all MCP operations: listing capabilities, calling tools, reading resources, and getting prompts.
+    </Tip>
+  </Step>
+</Steps>
+
+## Try Other Examples
+
+Now that you have the basic server running, try the other examples:
+
+<CodeGroup>
+```bash Python Calculator
+cd servers/calculator-py
+pip install mcp
+python server.py
+```
+
+```bash TypeScript Todo
+cd servers/todo-ts
+npm install
+npm run build
+npm start
+```
+</CodeGroup>
+
+### Python Calculator Server
+
+The Python example uses FastMCP for a simpler API:
+
+```python Python Server Example
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Calculator MCP Server")
+
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    if operation == "add":
+        return float(a + b)
+    elif operation == "subtract":
+        return float(a - b)
+    elif operation == "multiply":
+        return float(a * b)
+    elif operation == "divide":
+        if b == 0:
+            raise ValueError("No se puede dividir por cero")
+        return float(a / b)
+    else:
+        raise ValueError("Operación no válida")
+
+if __name__ == "__main__":
+    mcp.run(transport='stdio')
+```
+
+Test it with the Python client:
+
+```bash
+cd clients/basic-py
+python main.py
+```
+
+## What's Next?
+
+Now that you have a working MCP server, you can:
+
+<CardGroup cols={2}>
+  <Card title="Learn the Protocol" icon="book" href="/concepts/mcp-protocol">
+    Understand how MCP works under the hood
+  </Card>
+  
+  <Card title="Build Custom Tools" icon="wrench" href="/concepts/tools">
+    Create your own tools for specific use cases
+  </Card>
+  
+  <Card title="Explore Examples" icon="code" href="/servers/basic-typescript">
+    Deep dive into the server implementations
+  </Card>
+  
+  <Card title="Integrate with LLMs" icon="brain" href="/integrations/ollama">
+    Connect your server to Ollama or Claude
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Server doesn't start" icon="circle-xmark">
+    **Check Node.js version**: Make sure you're using Node.js 18 or higher
+    ```bash
+    node --version
+    ```
+    
+    **Check TypeScript compilation**: Look for errors in the build step
+    ```bash
+    npm run build
+    ```
+    
+    **Verify dependencies**: Reinstall packages if needed
+    ```bash
+    rm -rf node_modules package-lock.json
+    npm install
+    ```
+  </Accordion>
+
+  <Accordion title="Client can't connect" icon="link-slash">
+    **Update the server path**: Make sure the client points to the correct server location
+    
+    In `clients/basic-ts/src/index.ts`, update:
+    ```typescript
+    const transport = new StdioClientTransport({
+      command: "node",
+      args: ["/absolute/path/to/servers/basic/dist/server.js"]
+    });
+    ```
+    
+    **Check server is running**: The server must be compiled and the path must exist
+  </Accordion>
+
+  <Accordion title="Import errors in TypeScript" icon="file-import">
+    **Check package.json type**: Make sure `"type": "module"` is set
+    
+    **Use .js extensions**: Import statements need `.js` even for TypeScript files:
+    ```typescript
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+    ```
+    
+    This is required for ES modules in TypeScript.
+  </Accordion>
+
+  <Accordion title="Python import errors" icon="python">
+    **Install MCP SDK**: Make sure the package is installed
+    ```bash
+    pip install mcp
+    ```
+    
+    **Check Python version**: Use Python 3.10 or higher
+    ```bash
+    python --version
+    ```
+    
+    **Use virtual environment**: Recommended for isolation
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows: venv\Scripts\activate
+    pip install mcp
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+Still having issues? Check the [GitHub repository](https://github.com/alexyslozada/mcp-course) for the latest code and examples.
+</Tip>

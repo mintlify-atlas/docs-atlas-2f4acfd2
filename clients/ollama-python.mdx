@@ -1,0 +1,561 @@
+---
+title: 'Ollama Python Client'
+description: 'Build agentic applications with Ollama and MCP tools using Python'
+---
+
+## Overview
+
+The Ollama Python client integrates local language models with MCP tools, enabling LLMs to autonomously execute server-side functions. This creates a powerful agentic system for building AI applications with tool-calling capabilities.
+
+## Source Code
+
+The implementation can be found at `~/workspace/source/clients/ollama-py/`.
+
+## Prerequisites
+
+- Python 3.11 or higher
+- [Ollama](https://ollama.ai/) installed and running
+- A compatible LLM model (e.g., `mistral:latest`)
+- An MCP server
+
+## Installation
+
+### Using uv (Recommended)
+
+```bash
+# Install uv
+pip install uv
+
+# Install dependencies
+uv add requests mcp[cli] python-dotenv
+```
+
+### Using pip
+
+```bash
+pip install requests "mcp[cli]>=1.5.0" python-dotenv
+```
+
+## Architecture
+
+The implementation consists of four main components:
+
+1. **MCPClient**: Manages MCP server connections and tool execution
+2. **OllamaAPIClient**: Handles Ollama API communication
+3. **ToolManager**: Converts MCP tools to Ollama format
+4. **OllamaAgent**: Orchestrates LLM and tool interactions
+
+## MCP Client Implementation
+
+### Class Structure
+
+```python
+import logging
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from typing import Optional, Dict, Any
+
+logger = logging.getLogger(__name__)
+
+class MCPClient:
+    """Client for interacting with MCP servers."""
+    
+    def __init__(self, command: str, args: list[str], env: Optional[Dict[str, str]] = None):
+        self.server_params = StdioServerParameters(
+            command=command,
+            args=args,
+            env=env
+        )
+        self.session = None
+        self._client_ctx = None
+        self._session_ctx = None
+```
+
+### Connecting to MCP Server
+
+```python
+async def connect(self) -> bool:
+    """Establishes connection with the MCP server."""
+    try:
+        self._client_ctx = stdio_client(self.server_params)
+        client = await self._client_ctx.__aenter__()
+        self.read, self.write = client
+        
+        self._session_ctx = ClientSession(self.read, self.write)
+        self.session = await self._session_ctx.__aenter__()
+        await self.session.initialize()
+        
+        logger.info("Conexión exitosa con servidor MCP")
+        return True
+    except Exception as e:
+        logger.error(f"Error al conectar: {e}")
+        await self.disconnect()
+        return False
+```
+
+### Tool Operations
+
+```python
+async def list_tools(self) -> Any:
+    """Lists all available tools from the server."""
+    if not self.session:
+        raise RuntimeError("Cliente no conectado. Llama a connect() primero")
+    
+    tools = await self.session.list_tools()
+    logger.debug(f"Herramientas disponibles: {tools}")
+    return tools
+
+async def execute_tool(self, tool_name: str, arguments: Dict[str, Any]) -> Any:
+    """Executes a specific tool with arguments."""
+    if not self.session:
+        raise RuntimeError("Cliente no conectado. Llama a connect() primero")
+    
+    logger.debug(f"Ejecutando herramienta {tool_name} con argumentos: {arguments}")
+    result = await self.session.call_tool(tool_name, arguments)
+    logger.debug(f"Resultado: {result}")
+    return result
+```
+
+### Context Manager Support
+
+```python
+async def __aenter__(self) -> 'MCPClient':
+    """Async context manager entry."""
+    success = await self.connect()
+    if not success:
+        raise RuntimeError("Error al conectar con el servidor MCP")
+    return self
+
+async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+    """Async context manager exit."""
+    await self.disconnect()
+```
+
+## Ollama API Client
+
+### Client Implementation
+
+```python
+import requests
+import json
+from typing import List, Dict, Any, Union, Optional
+
+class OllamaAPIClient:
+    """Client for communicating with Ollama API."""
+    
+    def __init__(self, base_url: str = "http://localhost:11434"):
+        self.base_url = base_url
+
+    def check_connection(self) -> bool:
+        """Verifies connection to Ollama."""
+        try:
+            response = requests.get(f"{self.base_url}/api/tags")
+            if response.status_code != 200:
+                raise Exception(f"Error al conectarse: {response.status_code}")
+            return True
+        except requests.exceptions.ConnectionError:
+            raise Exception("No se pudo conectar al servidor de Ollama")
+```
+
+### Chat with Tools
+
+```python
+def chat(
+    self, 
+    model: str, 
+    messages: List[Dict[str, Any]], 
+    tools: List[Dict[str, Any]] = None,
+    options: Optional[Dict[str, Any]] = None
+) -> Union[str, Dict[str, Any]]:
+    """Sends a chat request to Ollama with optional tools."""
+    data = {
+        "model": model,
+        "messages": messages,
+        "stream": False
+    }
+    
+    if tools:
+        data["tools"] = tools
+        
+    if options:
+        data.update(options)
+    
+    response = requests.post(
+        f"{self.base_url}/api/chat", 
+        json=data, 
+        timeout=60
+    )
+    
+    if response.status_code != 200:
+        logger.error(f"Error en la conversación: {response.status_code}")
+        return None
+
+    return self._process_response(response.text)
+```
+
+### Response Processing
+
+```python
+def _process_response(self, response_text: str) -> Union[str, Dict[str, Any]]:
+    """Processes Ollama API response text."""
+    lines = response_text.strip().split('\n')
+    full_response = ""
+    
+    for line in lines:
+        try:
+            resp_json = json.loads(line)
+            
+            # Check for function call
+            if "message" in resp_json and "tool_calls" in resp_json["message"]:
+                function_call = resp_json["message"]["tool_calls"][0]
+                if function_call:
+                    return {
+                        "type": "function_call",
+                        "function_call": function_call
+                    }
+            
+            # Accumulate normal response
+            if "message" in resp_json and "content" in resp_json["message"]:
+                content = resp_json["message"].get("content")
+                if content:
+                    full_response += content
+                    
+        except json.JSONDecodeError:
+            logger.error(f"Error al decodificar: {line}")
+            continue
+    
+    return full_response
+```
+
+## Tool Manager
+
+```python
+class ToolManager:
+    """Manages tool conversion between MCP and Ollama formats."""
+    
+    def __init__(self):
+        self.built_in_tools = []
+    
+    def get_all_tools(self, mcp_tools=None) -> List[Dict[str, Any]]:
+        """Gets all available tools (built-in + MCP)."""
+        tools = self.built_in_tools.copy()
+        
+        # Add MCP tools
+        if mcp_tools and hasattr(mcp_tools, 'tools'):
+            for mcp_tool in mcp_tools.tools:
+                tools.append({
+                    'type': 'function',
+                    'function': {
+                        'name': f"mcp_{mcp_tool.name}",
+                        'description': getattr(mcp_tool, 'description', f"MCP tool: {mcp_tool.name}"),
+                        'parameters': getattr(mcp_tool, 'inputSchema', {'type': 'object'})
+                    }
+                })
+                
+        return tools
+```
+
+## Ollama Agent
+
+### Agent Class
+
+```python
+from enum import Enum
+
+class MessageRole(str, Enum):
+    SYSTEM = "system"
+    USER = "user"
+    ASSISTANT = "assistant"
+    TOOL = "tool"
+
+class OllamaAgent:
+    """Agent integrating Ollama with MCP tools."""
+    
+    def __init__(
+        self, 
+        ollama_url: str = "http://localhost:11434",
+        mcp_command: str = "node",
+        mcp_args: List[str] = None
+    ):
+        if mcp_args is None:
+            mcp_args = ["/path/to/server.js"]
+            
+        self.ollama_client = OllamaAPIClient(ollama_url)
+        self.mcp_client = MCPClient(mcp_command, mcp_args)
+        self.tool_manager = ToolManager()
+        self.toolsMCP = None
+        
+        # Verify Ollama connection
+        self.ollama_client.check_connection()
+        logger.info("✅ Conexión establecida con Ollama")
+```
+
+### Setup and Context Manager
+
+```python
+async def __aenter__(self):
+    """Async context manager entry."""
+    await self.setup()
+    return self
+
+async def __aexit__(self, exc_type, exc_val, exc_tb):
+    """Async context manager exit."""
+    if self.mcp_client:
+        await self.mcp_client.__aexit__(exc_type, exc_val, exc_tb)
+
+async def setup(self):
+    """Sets up the agent and MCP tools."""
+    try:
+        if self.mcp_client:
+            await self.mcp_client.__aenter__()
+            self.toolsMCP = await self.mcp_client.list_tools()
+            logger.info("✅ Conexión establecida con servidor MCP")
+    except Exception as e:
+        logger.error(f"❌ Error al conectarse al servidor MCP: {e}")
+        self.toolsMCP = None
+```
+
+### Tool Execution
+
+```python
+async def execute_mcp_tool(self, tool_name: str, arguments: Dict[str, Any]):
+    """Executes an MCP tool."""
+    if not self.mcp_client or not self.toolsMCP:
+        raise RuntimeError("MCP Client not connected or tools not available")
+    
+    try:
+        return await self.mcp_client.execute_tool(tool_name, arguments)
+    except Exception as e:
+        logger.error(f"Error executing MCP tool {tool_name}: {e}")
+        raise
+
+def chat(self, model: str, messages: List[Dict[str, Any]], options: Optional[Dict[str, Any]] = None):
+    """Conducts a conversation with the model."""
+    tools = self.tool_manager.get_all_tools(self.toolsMCP)
+    return self.ollama_client.chat(model, messages, tools, options)
+```
+
+## Function Execution Flow
+
+### Execute Function Handler
+
+```python
+async def execute_function(function_name: str, function_args: dict, agent: OllamaAgent) -> str:
+    """Executes a function with its arguments."""
+    try:
+        # Check if it's an MCP tool
+        if function_name.startswith("mcp_"):
+            actual_tool_name = function_name[4:]
+            try:
+                logger.info(f"Ejecutando herramienta MCP: {actual_tool_name}")
+                result = await agent.execute_mcp_tool(actual_tool_name, function_args)
+                logger.info(f"Resultado: {result}")
+                return str(result)
+            except Exception as e:
+                return f"Error ejecutando la herramienta MCP {actual_tool_name}: {e}"
+        
+        return f"Función {function_name} no implementada"
+    except Exception as e:
+        logger.error(f"Error ejecutando la función {function_name}: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Error ejecutando la función: {e}"
+```
+
+### Processing Function Calls
+
+```python
+async def process_function_call(model_name: str, response: dict, messages: list, agent: OllamaAgent):
+    """Processes a function call from the model."""
+    try:
+        function_call = response["function_call"]
+        function_name = function_call["function"]["name"]
+        
+        # Parse arguments
+        function_args_str = function_call["function"]["arguments"]
+        function_args = function_args_str if isinstance(function_args_str, dict) else json.loads(function_args_str)
+        
+        function_call_id = "call_" + str(len(messages))
+        
+        logger.info(f"\n{model_name} quiere llamar a la función: {function_name}")
+        logger.info(f"Con los argumentos: {json.dumps(function_args, indent=2)}")
+        
+        # Execute function
+        function_result = await execute_function(function_name, function_args, agent)
+        
+        logger.info(f"Resultado: {function_result}")
+        
+        # Add to message history
+        messages.append({
+            "role": MessageRole.ASSISTANT, 
+            "content": None,
+            "tool_calls": [{
+                "id": function_call_id,
+                "function": {
+                    "name": function_name,
+                    "arguments": function_args_str
+                }
+            }]
+        })
+        
+        messages.append({
+            "role": MessageRole.TOOL,
+            "tool_call_id": function_call_id,
+            "name": function_name,
+            "content": function_result
+        })
+        
+        # Get final response
+        final_response = agent.chat(model_name, messages)
+        
+        if isinstance(final_response, dict) and final_response.get("type") == "function_call":
+            await process_function_call(model_name, final_response, messages, agent)
+        elif isinstance(final_response, str):
+            print(f"\n{model_name}: {final_response}")
+            messages.append({"role": MessageRole.ASSISTANT, "content": final_response})
+    except Exception as e:
+        logger.error(f"Error procesando la llamada a función: {e}")
+        import traceback
+        traceback.print_exc()
+```
+
+## Interactive Chat
+
+```python
+async def interactive_chat(agent: OllamaAgent):
+    """Interactive chat mode with Ollama."""
+    model_name = "mistral:latest"
+    
+    # Verify model exists
+    models = agent.list_models()
+    model_exists = any(model["name"] == model_name for model in models)
+    
+    if not model_exists:
+        logger.warning(f"El modelo '{model_name}' no está disponible")
+        if models:
+            model_name = models[0]["name"]
+            logger.info(f"Usando el modelo: {model_name}")
+        else:
+            logger.error("No hay modelos disponibles")
+            return
+    
+    # Start chat
+    messages = []
+    messages.append({
+        "role": MessageRole.SYSTEM, 
+        "content": "Eres un agente que consultará las tools disponibles",
+    })
+    
+    print("\nIniciando chat (escribe '/salir' para terminar)")
+    
+    while True:
+        try:
+            user_message = input("\nTú: ")
+            
+            if user_message.lower() in ["/salir", "/exit", "/quit"]:
+                break
+            
+            messages.append({"role": MessageRole.USER, "content": user_message})
+            
+            print("Generando respuesta...")
+            response = agent.chat(model_name, messages)
+            
+            if response:
+                if isinstance(response, dict) and response.get("type") == "function_call":
+                    await process_function_call(model_name, response, messages, agent)
+                elif isinstance(response, str):
+                    print(f"\n{model_name}: {response}")
+                    messages.append({"role": MessageRole.ASSISTANT, "content": response})
+        except KeyboardInterrupt:
+            print("\nChat interrumpido")
+            break
+        except Exception as e:
+            logger.error(f"Error en el chat: {e}")
+```
+
+## Main Application
+
+```python
+import asyncio
+
+async def main():
+    """Main function."""
+    async with OllamaAgent() as agent:
+        await interactive_chat(agent)
+
+if __name__ == "__main__":
+    # Configure logging
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    
+    asyncio.run(main())
+```
+
+## Running the Application
+
+### Set Environment Variables
+
+```bash
+export MCP_SERVER_PATH="/path/to/your/server.js"
+```
+
+### Run the Application
+
+```bash
+python ollama-python-app.py
+```
+
+## Configuration
+
+```python
+DEFAULT_OLLAMA_URL = "http://localhost:11434"
+DEFAULT_MCP_SERVER_COMMAND = "node"
+DEFAULT_MCP_SERVER_PATH = os.environ.get(
+    "MCP_SERVER_PATH", 
+    "/path/to/server.js"
+)
+DEFAULT_MODEL = "mistral:latest"
+```
+
+## Best Practices
+
+1. **Use Context Managers**: Always use `async with` for proper cleanup
+2. **Error Handling**: Wrap tool calls in try-except blocks
+3. **Logging**: Use the logging module instead of print statements
+4. **Type Hints**: Include type hints for better IDE support
+5. **Model Selection**: Use models with function calling support
+
+## Troubleshooting
+
+### Ollama Connection Issues
+
+```bash
+# Check Ollama status
+ollama list
+
+# Start Ollama
+ollama serve
+
+# Pull a model
+ollama pull mistral:latest
+```
+
+### MCP Connection Errors
+
+- Verify server path in environment variable
+- Check that Node.js is installed
+- Ensure MCP server is properly compiled
+
+### Function Calling Not Working
+
+- Use models that support function calling (Mistral, Llama 3 70B)
+- Check tool definitions are properly formatted
+- Verify message history structure
+
+## Next Steps
+
+- Explore [TypeScript + Ollama integration](/clients/ollama-typescript)
+- Learn about [basic Python client](/clients/basic-python)
+- Build custom MCP servers with advanced tools

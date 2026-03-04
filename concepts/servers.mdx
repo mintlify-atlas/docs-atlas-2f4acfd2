@@ -1,0 +1,364 @@
+---
+title: 'MCP Servers'
+description: 'Learn how to create and configure MCP servers to expose capabilities to AI applications'
+icon: 'server'
+---
+
+## What is an MCP Server?
+
+An MCP server is a program that exposes capabilities (tools, resources, and prompts) to AI applications through the Model Context Protocol. Servers run as separate processes and communicate with clients via the MCP protocol.
+
+## Creating an MCP Server
+
+### TypeScript Server
+
+The MCP SDK for TypeScript provides the `McpServer` class for creating servers.
+
+<Steps>
+  <Step title="Install Dependencies">
+    ```bash
+    npm install @modelcontextprotocol/sdk zod
+    ```
+  </Step>
+  
+  <Step title="Import Required Modules">
+    ```typescript
+    import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+    import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+    import { z } from "zod";
+    ```
+  </Step>
+  
+  <Step title="Create Server Instance">
+    ```typescript
+    const server = new McpServer({
+      name: "My MCP Server",
+      version: "1.0.0",
+      capabilities: {
+        resources: {},
+        tools: {},
+        prompts: {}
+      }
+    });
+    ```
+  </Step>
+  
+  <Step title="Connect Transport and Start">
+    ```typescript
+    async function main() {
+      const transport = new StdioServerTransport();
+      await server.connect(transport);
+    }
+    
+    main().catch(error => {
+      console.error(`Server error: ${error.message}`);
+      process.exit(1);
+    });
+    ```
+  </Step>
+</Steps>
+
+### Python Server
+
+The FastMCP library provides a simpler API for creating Python servers.
+
+<Steps>
+  <Step title="Install FastMCP">
+    ```bash
+    pip install mcp
+    ```
+  </Step>
+  
+  <Step title="Create Server Instance">
+    ```python
+    from mcp.server.fastmcp import FastMCP
+    
+    mcp = FastMCP("Calculator MCP Server")
+    ```
+  </Step>
+  
+  <Step title="Run Server">
+    ```python
+    if __name__ == "__main__":
+        mcp.run(transport='stdio')
+    ```
+  </Step>
+</Steps>
+
+## Real-World Server Examples
+
+### Game of Thrones Quotes Server
+
+This server demonstrates all three capability types (tools, resources, and prompts).
+
+**Location**: `source/servers/basic/src/server.ts`
+
+```typescript
+const server = new McpServer({
+  name: "Game of Thrones Quotes",
+  version: "1.0.0",
+  capabilities: {
+    resources: { listChanged: true },
+    tools: {},
+    prompts: {}
+  }
+});
+```
+
+**Features**:
+- Fetches quotes from external API
+- Provides tools for getting random quotes and calculating LCM
+- Exposes static and dynamic resources
+- Offers analysis prompts
+
+### Calculator Server (Python)
+
+A simple calculator demonstrating Python server implementation.
+
+**Location**: `source/servers/calculator-py/server.py:1-34`
+
+```python
+from mcp.server.fastmcp import FastMCP
+
+mcp = FastMCP("Calculator MCP Server")
+
+def add(a: float, b: float) -> float:
+    return float(a + b)
+
+def subtract(a: float, b: float) -> float:
+    return float(a - b)
+
+@mcp.tool()
+def calculate(a: float, b: float, operation: str) -> float:
+    if operation == "add":
+        return add(a, b)
+    elif operation == "subtract":
+        return subtract(a, b)
+    elif operation == "multiply":
+        return multiply(a, b)
+    elif operation == "divide":
+        return divide(a, b)
+    else:
+        raise ValueError("Operación no válida")
+```
+
+### TODO List Server
+
+A CRUD server for managing TODO items.
+
+**Location**: `source/servers/todo-ts/src/index.ts:1-13`
+
+```typescript
+const server = new McpServer({
+    name: "TODO List MCP Server",
+    version: "1.0.0",
+    capabilities: {
+      tools: {},
+    },
+});
+```
+
+**Features**:
+- Create, read, update, delete TODO items
+- Complete and clear completed TODOs
+- Demonstrates stateful server pattern
+
+## Server Lifecycle
+
+### 1. Initialization
+
+When a client connects, the server goes through an initialization handshake:
+
+<Steps>
+  <Step title="Client Connects">
+    Client spawns server process and connects to stdio streams
+  </Step>
+  
+  <Step title="Capability Exchange">
+    Client and server exchange capability information
+  </Step>
+  
+  <Step title="Ready State">
+    Server enters ready state and can handle requests
+  </Step>
+</Steps>
+
+### 2. Request Handling
+
+Once initialized, the server processes incoming requests:
+
+- **List requests**: Return available capabilities
+- **Call requests**: Execute tools, read resources, get prompts
+- **Notification requests**: Handle updates and changes
+
+### 3. Shutdown
+
+When the client disconnects, the server cleans up and exits:
+
+```typescript
+main().catch(error => {
+  console.error(`Server error: ${error.message}`);
+  process.exit(1);
+});
+```
+
+## Server Configuration
+
+### Declaring Capabilities
+
+Servers must declare which capabilities they support:
+
+```typescript
+capabilities: {
+  resources: { 
+    listChanged: true  // Server can notify when resource list changes
+  },
+  tools: {},           // Server supports tools
+  prompts: {}          // Server supports prompts
+}
+```
+
+<Warning>
+  Only declare capabilities you actually implement. Clients may fail if they request unsupported features.
+</Warning>
+
+### Server Metadata
+
+```typescript
+const server = new McpServer({
+  name: "My Server",        // Human-readable server name
+  version: "1.0.0",         // Semantic version
+  capabilities: { ... }
+});
+```
+
+## Error Handling
+
+### TypeScript Error Handling
+
+From `source/servers/basic/src/server.ts:92-96`:
+
+```typescript
+catch (error) {
+  return {
+    content: [{ type: "text", text: `Error: ${(error as Error).message}` }],
+    isError: true
+  };
+}
+```
+
+### Python Error Handling
+
+From `source/servers/calculator-py/server.py:14-16`:
+
+```python
+def divide(a: float, b: float) -> float:
+    if b == 0:
+        raise ValueError("No se puede dividir por cero")
+    return float(a / b)
+```
+
+<Tip>
+  Always include proper error handling in your tools and resources. Return descriptive error messages to help clients debug issues.
+</Tip>
+
+## Transport Options
+
+### Stdio Transport (Most Common)
+
+```typescript
+import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+
+const transport = new StdioServerTransport();
+await server.connect(transport);
+```
+
+**Advantages**:
+- Simple to implement
+- No network configuration
+- Process isolation
+- Works across languages
+
+### Other Transports
+
+MCP also supports:
+- **SSE (Server-Sent Events)**: For web-based servers
+- **HTTP**: For REST-like interactions
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Descriptive Names">
+    Give your server and capabilities clear, descriptive names:
+    
+    ```typescript
+    const server = new McpServer({
+      name: "Weather Data Provider",  // Clear purpose
+      version: "1.0.0"
+    });
+    ```
+  </Accordion>
+  
+  <Accordion title="Validate Input">
+    Always validate input parameters using schemas (Zod for TypeScript):
+    
+    ```typescript
+    server.tool(
+      "get_quotes",
+      { count: z.number().min(1).max(10) },
+      async ({ count }) => { ... }
+    );
+    ```
+  </Accordion>
+  
+  <Accordion title="Return Structured Errors">
+    Use the `isError` flag and provide helpful error messages:
+    
+    ```typescript
+    return {
+      content: [{ type: "text", text: "Count must be between 1 and 10" }],
+      isError: true
+    };
+    ```
+  </Accordion>
+  
+  <Accordion title="Log to stderr">
+    Use stderr for logging, not stdout (which is used for MCP messages):
+    
+    ```typescript
+    console.error("[INFO] Server started");
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Testing Your Server
+
+You can test your server using the MCP Inspector or by creating a simple client:
+
+```bash
+# Build your server
+npm run build
+
+# Test with MCP Inspector
+npx @modelcontextprotocol/inspector node dist/server.js
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Tools" icon="wrench" href="/concepts/tools">
+    Learn how to add tools to your server
+  </Card>
+  
+  <Card title="Resources" icon="database" href="/concepts/resources">
+    Discover how to expose data through resources
+  </Card>
+  
+  <Card title="Prompts" icon="message" href="/concepts/prompts">
+    Create reusable prompt templates
+  </Card>
+  
+  <Card title="Clients" icon="laptop" href="/concepts/clients">
+    Build clients to connect to your server
+  </Card>
+</CardGroup>

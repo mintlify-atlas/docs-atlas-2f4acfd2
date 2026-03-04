@@ -1,0 +1,655 @@
+---
+title: EDteam API Integration
+description: Build a production-ready MCP server with authentication, API integration, and real-world patterns in Go
+---
+
+# EDteam API Integration
+
+This example demonstrates how to build a production-ready MCP server in Go that integrates with a real-world API, handles authentication, and follows best practices.
+
+## Overview
+
+The EDteam server showcases:
+- **Authentication**: Secure login and token management
+- **HTTP Client**: Reusable HTTP request handling
+- **Multiple Endpoints**: Integrating various API endpoints
+- **Error Handling**: Robust error handling patterns
+- **Environment Variables**: Secure credential management
+- **Production Patterns**: Real-world API integration strategies
+
+## Project Structure
+
+```
+edteam-go/
+├── main.go          # Server initialization and tool registration
+├── login.go         # Authentication logic
+├── http.go          # HTTP client utilities
+├── courses.go       # Courses API integration
+├── subscription.go  # Subscriptions API
+├── shopping-cart.go # Shopping cart operations
+├── models.go        # Data models
+└── go.mod           # Go dependencies
+```
+
+## Data Models
+
+### Subscription Model
+
+```go models.go
+package main
+
+import "time"
+
+type Subscription struct {
+    ID               int       `json:"id"`
+    SubscriptionDate time.Time `json:"subscription_date"`
+    Months           int       `json:"months"`
+    BeginsAt         time.Time `json:"begins_at"`
+    EndsAt           time.Time `json:"ends_at"`
+    State            string    `json:"state"`
+    Observations     string    `json:"observations"`
+    CreatedAt        time.Time `json:"created_at"`
+    Buyer            string    `json:"buyer"`
+}
+
+type SubscriptionResponse struct {
+    Data []Subscription `json:"data"`
+}
+```
+
+### Course Model
+
+```go
+type CourseResponse struct {
+    Data []struct {
+        Course struct {
+            AddressedTo     string    `json:"addressed_to"`
+            CourseType      string    `json:"course_type"`
+            CreatedAt       time.Time `json:"created_at"`
+            ID              int       `json:"id"`
+            Level           string    `json:"level"`
+            Name            string    `json:"name"`
+            OnSale          bool      `json:"on_sale"`
+            Picture         string    `json:"picture"`
+            Slug            string    `json:"slug"`
+            Subtitle        string    `json:"subtitle"`
+            VerticalPicture string    `json:"vertical_picture"`
+            Visible         bool      `json:"visible"`
+            YouLearn        string    `json:"you_learn"`
+        } `json:"course"`
+        CoursePrices []struct {
+            BasePrice  int       `json:"base_price"`
+            CreatedAt  time.Time `json:"created_at"`
+            CurrencyId int       `json:"currency_id"`
+            ID         int       `json:"id"`
+            Price      int       `json:"price"`
+        } `json:"course_prices"`
+        Professors []struct {
+            Biography   string    `json:"biography"`
+            City        string    `json:"city"`
+            CountryName string    `json:"country_name"`
+            CreatedAt   time.Time `json:"created_at"`
+            Firstname   string    `json:"firstname"`
+            ID          int       `json:"id"`
+            Lastname    string    `json:"lastname"`
+            Nickname    string    `json:"nickname"`
+            Picture     string    `json:"picture"`
+        } `json:"professors"`
+    } `json:"data"`
+}
+```
+
+## HTTP Client
+
+### Reusable Request Function
+
+```go http.go
+package main
+
+import (
+    "bytes"
+    "context"
+    "encoding/json"
+    "fmt"
+    "io"
+    "log"
+    "net/http"
+)
+
+func Request(
+    ctx context.Context,
+    method, url, token string,
+    data any
+) (int, []byte, error) {
+    var body []byte
+    if data != nil {
+        // Handle raw bytes or marshal to JSON
+        if b, ok := data.([]byte); ok {
+            body = b
+        } else {
+            var err error
+            body, err = json.Marshal(data)
+            if err != nil {
+                return 0, nil, fmt.Errorf("failed to marshal data: %w", err)
+            }
+        }
+    }
+
+    // Create HTTP request
+    req, err := http.NewRequest(method, url, bytes.NewReader(body))
+    if err != nil {
+        return 0, nil, fmt.Errorf("failed to create request: %w", err)
+    }
+
+    // Set headers
+    req.Header.Set("Content-Type", "application/json")
+    req.Header.Set("Accept", "application/json")
+    if token != "" {
+        req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
+    }
+    req = req.WithContext(ctx)
+
+    // Execute request
+    client := &http.Client{}
+    resp, err := client.Do(req)
+    if err != nil {
+        return 0, nil, fmt.Errorf("failed to send request: %w", err)
+    }
+    defer func(resp *http.Response) {
+        errClose := resp.Body.Close()
+        if errClose != nil {
+            log.Printf("failed to close response body: %v", errClose)
+        }
+    }(resp)
+
+    // Read response body
+    respBody, err := io.ReadAll(resp.Body)
+    if err != nil {
+        return 0, nil, fmt.Errorf("failed to read response body: %w", err)
+    }
+
+    return resp.StatusCode, respBody, nil
+}
+```
+
+This utility function:
+- Handles both raw bytes and JSON marshaling
+- Sets appropriate headers
+- Manages authentication tokens
+- Includes context for cancellation
+- Properly closes response bodies
+
+## Authentication
+
+### Login Flow
+
+```go login.go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+type Login struct {
+    Email    string `json:"email"`
+    Password string `json:"password"`
+}
+
+type LoginResponse struct {
+    Data struct {
+        Token string `json:"token"`
+    } `json:"data"`
+}
+
+func ProcessLogin(ctx context.Context, email, password string) (string, error) {
+    login := Login{
+        Email:    email,
+        Password: password,
+    }
+
+    // Make the login request
+    urlLogin := "https://api.ed.team/api/v1/login"
+    statusCode, responseBody, err := Request(ctx, http.MethodPost, urlLogin, "", login)
+    if err != nil {
+        return "", err
+    }
+    if statusCode != http.StatusOK {
+        return "", fmt.Errorf("unexpected status code: %d", statusCode)
+    }
+
+    // Parse the response
+    var response LoginResponse
+    err = json.Unmarshal(responseBody, &response)
+    if err != nil {
+        return "", fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return response.Data.Token, nil
+}
+```
+
+## API Integrations
+
+### Subscriptions
+
+```go subscription.go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+func GetSubscription(
+    ctx context.Context,
+    token string
+) (SubscriptionResponse, error) {
+    urlSubscriptions := "https://api.ed.team/api/v1/subscriptions/historical"
+    statusCode, responseBody, err := Request(
+        ctx,
+        http.MethodGet,
+        urlSubscriptions,
+        token,
+        nil
+    )
+    if err != nil {
+        return SubscriptionResponse{}, err
+    }
+    if statusCode != http.StatusOK {
+        return SubscriptionResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+    }
+
+    // Parse the response
+    var subscriptions SubscriptionResponse
+    err = json.Unmarshal(responseBody, &subscriptions)
+    if err != nil {
+        return SubscriptionResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return subscriptions, nil
+}
+```
+
+### Courses
+
+```go courses.go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+func GetCourses(
+    ctx context.Context,
+    page, limit uint
+) (CourseResponse, error) {
+    urlCourses := "https://jarvis-v2.ed.team/v2/public/cache-edql"
+    body := []byte(fmt.Sprintf(
+        `{"name":"cache:GENERAL:page(%d):limit(%d):key(COURSES_GRID_PAGINATION)"}`,
+        page,
+        limit
+    ))
+
+    statusCode, responseBody, err := Request(
+        ctx,
+        http.MethodPost,
+        urlCourses,
+        "",
+        body
+    )
+    if err != nil {
+        return CourseResponse{}, err
+    }
+    if statusCode != http.StatusOK {
+        return CourseResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+    }
+
+    // Parse the response
+    var courses CourseResponse
+    err = json.Unmarshal(responseBody, &courses)
+    if err != nil {
+        return CourseResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return courses, nil
+}
+```
+
+### Shopping Cart
+
+```go shopping-cart.go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "net/http"
+)
+
+type ShoppingCartResponse struct {
+    Messages []struct {
+        Title   string `json:"title"`
+        Message string `json:"message"`
+        Code    string `json:"code"`
+    }
+}
+
+func AddCourseToShoppingCart(
+    ctx context.Context,
+    token string,
+    courseID int
+) (ShoppingCartResponse, error) {
+    urlShoppingCart := "https://billing-v2.ed.team/v2/private/shopping-carts"
+    body := []byte(fmt.Sprintf(`{"course_id":%d}`, courseID))
+
+    statusCode, responseBody, err := Request(
+        ctx,
+        http.MethodPost,
+        urlShoppingCart,
+        token,
+        body
+    )
+    if err != nil {
+        return ShoppingCartResponse{}, err
+    }
+    if statusCode != http.StatusCreated {
+        return ShoppingCartResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+    }
+
+    // Parse the response
+    var shoppingCart ShoppingCartResponse
+    err = json.Unmarshal(responseBody, &shoppingCart)
+    if err != nil {
+        return ShoppingCartResponse{}, fmt.Errorf("failed to unmarshal response: %w", err)
+    }
+
+    return shoppingCart, nil
+}
+```
+
+## MCP Server Setup
+
+### Main Server
+
+```go main.go
+package main
+
+import (
+    "context"
+    "encoding/json"
+    "fmt"
+    "log"
+    "os"
+
+    "github.com/mark3labs/mcp-go/mcp"
+    "github.com/mark3labs/mcp-go/server"
+)
+
+func main() {
+    log.SetOutput(os.Stderr)
+
+    // Get credentials from environment
+    email := os.Getenv("EMAIL")
+    password := os.Getenv("PASSWORD")
+    if email == "" || password == "" {
+        panic("EMAIL and PASSWORD environment variables must be set")
+    }
+
+    // Authenticate and get token
+    ctx := context.Background()
+    token, err := ProcessLogin(ctx, email, password)
+    if err != nil {
+        panic(err)
+    }
+
+    // Create MCP server
+    s := server.NewMCPServer(
+        "EDteam API",
+        "1.0.0",
+        server.WithToolCapabilities(false),
+        server.WithLogging(),
+    )
+
+    // Register tools...
+    // (See tool registration below)
+
+    // Start the server
+    if err := server.ServeStdio(s); err != nil {
+        panic(err)
+    }
+}
+```
+
+### Tool: List Subscriptions
+
+```go
+subscriptionsTool := mcp.NewTool(
+    "Subscriptions",
+    mcp.WithDescription("List all your subscriptions in the history of EDteam"),
+)
+
+s.AddTool(subscriptionsTool, func(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    subscriptions, err := GetSubscription(ctx, token)
+    if err != nil {
+        return nil, err
+    }
+
+    subscriptionsRaw, err := json.Marshal(subscriptions)
+    if err != nil {
+        return nil, err
+    }
+
+    return mcp.NewToolResultText(string(subscriptionsRaw)), nil
+})
+```
+
+### Tool: List Courses
+
+```go
+coursesListTool := mcp.NewTool(
+    "Courses-List",
+    mcp.WithDescription("List all courses of EDteam"),
+    mcp.WithNumber("page", mcp.Description("Page number"), mcp.DefaultNumber(1)),
+    mcp.WithNumber("limit", mcp.Description("Limit number of courses"), mcp.DefaultNumber(10)),
+)
+
+s.AddTool(coursesListTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    // Extract parameters with defaults
+    page, ok := request.Params.Arguments["page"].(float64)
+    if !ok {
+        page = 1
+    }
+    limit, ok := request.Params.Arguments["limit"].(float64)
+    if !ok || limit <= 0 || limit > 10 {
+        limit = 10
+    }
+
+    courses, err := GetCourses(ctx, uint(page), uint(limit))
+    if err != nil {
+        return nil, err
+    }
+
+    coursesRaw, err := json.Marshal(courses)
+    if err != nil {
+        return nil, err
+    }
+
+    return mcp.NewToolResultText(string(coursesRaw)), nil
+})
+```
+
+### Tool: Add to Shopping Cart
+
+```go
+shoppingCartTool := mcp.NewTool(
+    "Shopping-Cart-Add-Course",
+    mcp.WithDescription("Add a course to your shopping cart"),
+    mcp.WithNumber("course_id", mcp.Description("Course ID"), mcp.DefaultNumber(0), mcp.Required()),
+)
+
+s.AddTool(shoppingCartTool, func(ctx context.Context, request mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+    courseID, ok := request.Params.Arguments["course_id"].(float64)
+    if !ok {
+        return nil, fmt.Errorf("course_id must be a number")
+    }
+
+    shoppingCart, err := AddCourseToShoppingCart(ctx, token, int(courseID))
+    if err != nil {
+        return nil, err
+    }
+
+    shoppingCartRaw, err := json.Marshal(shoppingCart)
+    if err != nil {
+        return nil, err
+    }
+
+    return mcp.NewToolResultText(string(shoppingCartRaw)), nil
+})
+```
+
+## Environment Configuration
+
+### Setting Credentials
+
+```bash
+export EMAIL="your-email@example.com"
+export PASSWORD="your-password"
+```
+
+### Claude Desktop Configuration
+
+```json claude_desktop_config.json
+{
+  "mcpServers": {
+    "edteam": {
+      "command": "/path/to/edteam-server",
+      "env": {
+        "EMAIL": "your-email@example.com",
+        "PASSWORD": "your-password"
+      }
+    }
+  }
+}
+```
+
+## Building and Running
+
+### Dependencies
+
+```go go.mod
+module edteam-server
+
+go 1.21
+
+require github.com/mark3labs/mcp-go v0.6.1
+```
+
+### Build
+
+```bash
+# Install dependencies
+go mod download
+
+# Build the server
+go build -o edteam-server .
+
+# Run the server
+./edteam-server
+```
+
+## Production Patterns
+
+### Error Handling
+
+```go
+if statusCode != http.StatusOK {
+    return CourseResponse{}, fmt.Errorf("unexpected status code: %d", statusCode)
+}
+```
+
+Always check status codes and return meaningful errors.
+
+### Context Propagation
+
+```go
+func GetCourses(ctx context.Context, page, limit uint) (CourseResponse, error) {
+    // Use context for cancellation and timeouts
+    statusCode, responseBody, err := Request(ctx, ...)
+    ...
+}
+```
+
+Pass context through all API calls for proper cancellation and timeout handling.
+
+### Resource Cleanup
+
+```go
+defer func(resp *http.Response) {
+    errClose := resp.Body.Close()
+    if errClose != nil {
+        log.Printf("failed to close response body: %v", errClose)
+    }
+}(resp)
+```
+
+Always close response bodies to prevent resource leaks.
+
+### Type Safety
+
+```go
+page, ok := request.Params.Arguments["page"].(float64)
+if !ok {
+    page = 1 // Provide sensible defaults
+}
+```
+
+Use type assertions with fallback values.
+
+## Security Best Practices
+
+1. **Environment Variables**: Never hardcode credentials
+2. **Token Management**: Store tokens securely, not in logs
+3. **HTTPS Only**: Always use HTTPS for API calls
+4. **Error Messages**: Don't leak sensitive information in errors
+5. **Logging**: Use `os.Stderr` for logs (not stdout)
+
+## Testing
+
+### Unit Test Example
+
+```go
+func TestGetCourses(t *testing.T) {
+    ctx := context.Background()
+    courses, err := GetCourses(ctx, 1, 5)
+    if err != nil {
+        t.Fatalf("GetCourses failed: %v", err)
+    }
+    if len(courses.Data) == 0 {
+        t.Error("Expected courses, got none")
+    }
+}
+```
+
+## Key Takeaways
+
+1. **Reusable HTTP Client**: Create utilities for common operations
+2. **Authentication First**: Handle auth before registering tools
+3. **Struct Tags**: Use JSON tags for proper serialization
+4. **Error Wrapping**: Use `fmt.Errorf` with `%w` for error chains
+5. **Environment Config**: Use env vars for sensitive data
+6. **Context Usage**: Always propagate context for cancellation
+
+## Next Steps
+
+- Explore [Todo Management](/examples/todo-management) for state patterns
+- Learn about [External APIs](/examples/game-of-thrones-quotes)
+- See how to use with [Ollama](/integrations/ollama)

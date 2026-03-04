@@ -1,0 +1,267 @@
+---
+title: 'Basic TypeScript Client'
+description: 'Learn how to build a basic MCP client using TypeScript to interact with MCP servers'
+---
+
+## Overview
+
+The basic TypeScript client demonstrates how to connect to an MCP server and interact with its capabilities including tools, resources, and prompts. This implementation uses the official `@modelcontextprotocol/sdk` package.
+
+## Source Code
+
+The implementation can be found at `~/workspace/source/clients/basic-ts/`.
+
+## Installation
+
+### Dependencies
+
+Install the required packages:
+
+```bash
+npm install @modelcontextprotocol/sdk @types/node typescript
+```
+
+### Package Configuration
+
+Your `package.json` should include:
+
+```json
+{
+  "name": "basic-ts",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.8.0",
+    "@types/node": "^22.13.13",
+    "typescript": "^5.8.2"
+  }
+}
+```
+
+## Client Implementation
+
+### 1. Setting Up the Transport
+
+The client uses `StdioClientTransport` to communicate with the MCP server via standard input/output:
+
+```typescript
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+const transport = new StdioClientTransport({
+  command: "node",
+  args: ["/path/to/your/server.js"]
+});
+```
+
+### 2. Creating the Client
+
+Initialize the MCP client with capabilities:
+
+```typescript
+const client = new Client(
+  {
+    name: "basic-client",
+    version: "1.0.0"
+  },
+  {
+    capabilities: {
+      prompts: {},
+      resources: {},
+      tools: {}
+    }
+  }
+);
+```
+
+### 3. Connecting to the Server
+
+Establish the connection:
+
+```typescript
+await client.connect(transport);
+```
+
+## Working with MCP Capabilities
+
+### Listing Available Resources
+
+Retrieve all available resources from the server:
+
+```typescript
+// List static resources
+const resources = await client.listResources();
+console.log(JSON.stringify(resources, null, 2));
+
+// List resource templates (dynamic resources)
+const templateResources = await client.listResourceTemplates();
+console.log(JSON.stringify(templateResources, null, 2));
+```
+
+### Reading Resources
+
+Access specific resources by URI:
+
+```typescript
+// Read a static resource
+const resource = await client.readResource({
+  uri: "got://quotes/random"
+});
+console.log(JSON.stringify(resource, null, 2));
+
+// Read a dynamic resource with parameters
+const templateResource = await client.readResource({
+  uri: "person://properties/alexys"
+});
+console.log(JSON.stringify(templateResource, null, 2));
+```
+
+### Working with Prompts
+
+Prompts are reusable message templates:
+
+```typescript
+// List all available prompts
+const prompts = await client.listPrompts();
+console.log(JSON.stringify(prompts, null, 2));
+
+// Get a specific prompt with arguments
+const prompt = await client.getPrompt({
+  name: "code-review",
+  arguments: {
+    code: "print('Hello, world!')"
+  }
+});
+console.log(JSON.stringify(prompt, null, 2));
+```
+
+### Calling Tools
+
+Execute server-side tools:
+
+```typescript
+// List available tools
+const tools = await client.listTools();
+console.log(JSON.stringify(tools, null, 2));
+
+// Call a tool with arguments
+const toolResult = await client.callTool({
+  name: "sum_array",
+  arguments: {
+    numbers: [1, 2, 3, 4, 5]
+  }
+});
+console.log(JSON.stringify(toolResult, null, 2));
+```
+
+## Complete Example
+
+Here's a complete client implementation from `~/workspace/source/clients/basic-ts/src/index.ts`:
+
+```typescript
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+
+const transport = new StdioClientTransport({
+  command: "node",
+  args: ["/path/to/server.js"]
+});
+
+const client = new Client(
+  {
+    name: "basic-client",
+    version: "1.0.0"
+  },
+  {
+    capabilities: {
+      prompts: {},
+      resources: {},
+      tools: {}
+    }
+  }
+);
+
+await client.connect(transport);
+
+// List all capabilities
+const prompts = await client.listPrompts();
+const resources = await client.listResources();
+const tools = await client.listTools();
+
+// Use a prompt
+const prompt = await client.getPrompt({
+  name: prompts.prompts[1].name,
+  arguments: {
+    code: "print('Hello, world!')"
+  }
+});
+
+// Read a resource
+const resource = await client.readResource({
+  uri: "got://quotes/random"
+});
+
+// Call a tool
+const tool = await client.callTool({
+  name: tools.tools[1].name,
+  arguments: {
+    numbers: [1, 2, 3, 4, 5]
+  }
+});
+```
+
+## Client API Methods
+
+The MCP Client provides these key methods:
+
+| Method | Description | Returns |
+|--------|-------------|----------|
+| `connect(transport)` | Establishes connection to MCP server | `Promise<void>` |
+| `listPrompts()` | Lists all available prompts | `Promise<PromptsListResult>` |
+| `getPrompt(params)` | Retrieves a prompt with arguments | `Promise<PromptResult>` |
+| `listResources()` | Lists all static resources | `Promise<ResourcesListResult>` |
+| `listResourceTemplates()` | Lists dynamic resource templates | `Promise<ResourceTemplatesListResult>` |
+| `readResource(params)` | Reads a specific resource | `Promise<ResourceResult>` |
+| `listTools()` | Lists all available tools | `Promise<ToolsListResult>` |
+| `callTool(params)` | Executes a tool with arguments | `Promise<ToolResult>` |
+| `close()` | Closes the connection | `Promise<void>` |
+
+## Building and Running
+
+### Compile the TypeScript code:
+
+```bash
+npm run build
+```
+
+### Run the client:
+
+```bash
+npm start
+```
+
+## Error Handling
+
+Always handle connection and execution errors:
+
+```typescript
+try {
+  await client.connect(transport);
+  const tools = await client.listTools();
+  // ... use the client
+} catch (error) {
+  console.error("Error:", error);
+} finally {
+  await client.close();
+}
+```
+
+## Next Steps
+
+- Learn about [integrating with Ollama](/clients/ollama-typescript)
+- Explore the [Python client implementation](/clients/basic-python)
+- Build custom tools for your MCP server
